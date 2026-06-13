@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import postgres from "postgres";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const envPath = join(rootDir, ".env");
@@ -23,52 +23,50 @@ if (!existsSync(migrationsDir)) {
   process.exit(1);
 }
 
-runPsql([
-  "-c",
-  `CREATE TABLE IF NOT EXISTS schema_migrations (
-    id SERIAL PRIMARY KEY,
-    name TEXT UNIQUE NOT NULL,
-    applied_at TIMESTAMP DEFAULT NOW()
-  );`,
-]);
+const sql = postgres(databaseUrl, { max: 1 });
 
-const migrationFiles = readdirSync(migrationsDir)
-  .filter((file) => file.endsWith(".sql"))
-  .sort();
+try {
+  await sql`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      id SERIAL PRIMARY KEY,
+      name TEXT UNIQUE NOT NULL,
+      applied_at TIMESTAMP DEFAULT NOW()
+    )
+  `;
 
-if (migrationFiles.length === 0) {
-  console.log("No migrations found.");
-  process.exit(0);
-}
+  const appliedRows = await sql`SELECT name FROM schema_migrations`;
+  const appliedMigrations = new Set(appliedRows.map((row) => row.name));
+  const migrationFiles = readdirSync(migrationsDir)
+    .filter((file) => file.endsWith(".sql"))
+    .sort();
 
-for (const file of migrationFiles) {
-  const migrationName = file;
-  const migrationNameSql = sqlString(migrationName);
-  const alreadyApplied = runPsql([
-    "-t",
-    "-A",
-    "-c",
-    `SELECT EXISTS (
-      SELECT 1 FROM schema_migrations WHERE name = ${migrationNameSql}
-    );`,
-  ]).trim();
-
-  if (alreadyApplied === "t") {
-    console.log(`Skipping ${migrationName}`);
-    continue;
+  if (migrationFiles.length === 0) {
+    console.log("No migrations found.");
   }
 
-  const migrationPath = join(migrationsDir, file);
-  const migrationSql = readFileSync(migrationPath, "utf8");
-  const wrappedMigration = [
-    "BEGIN;",
-    migrationSql,
-    `INSERT INTO schema_migrations (name) VALUES (${migrationNameSql});`,
-    "COMMIT;",
-  ].join("\n\n");
+  for (const file of migrationFiles) {
+    if (appliedMigrations.has(file)) {
+      console.log(`Skipping ${file}`);
+      continue;
+    }
 
-  runPsql([], wrappedMigration);
-  console.log(`Applied ${migrationName}`);
+    const migrationSql = readFileSync(join(migrationsDir, file), "utf8");
+
+    await sql.begin(async (transaction) => {
+      await transaction.unsafe(migrationSql);
+      await transaction`
+        INSERT INTO schema_migrations (name)
+        VALUES (${file})
+      `;
+    });
+
+    console.log(`Applied ${file}`);
+  }
+} catch (error) {
+  console.error(error);
+  process.exitCode = 1;
+} finally {
+  await sql.end();
 }
 
 function loadEnv(filePath) {
@@ -105,40 +103,4 @@ function loadEnv(filePath) {
       process.env[key] = value;
     }
   }
-}
-
-function runPsql(args, input) {
-  const result = spawnSync(
-    "psql",
-    ["--no-psqlrc", "-v", "ON_ERROR_STOP=1", databaseUrl, ...args],
-    {
-      cwd: rootDir,
-      input,
-      encoding: "utf8",
-      env: process.env,
-    },
-  );
-
-  if (result.error?.code === "ENOENT") {
-    console.error("psql was not found. Install PostgreSQL client tools and try again.");
-    process.exit(1);
-  }
-
-  if (result.status !== 0) {
-    if (result.stdout) {
-      console.error(result.stdout.trim());
-    }
-
-    if (result.stderr) {
-      console.error(result.stderr.trim());
-    }
-
-    process.exit(result.status ?? 1);
-  }
-
-  return result.stdout;
-}
-
-function sqlString(value) {
-  return `'${value.replaceAll("'", "''")}'`;
 }
