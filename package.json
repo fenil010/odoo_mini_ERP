@@ -9,8 +9,7 @@
     "lint": "eslint",
     "migrate": "node scripts/migrate.mjs",
     "seed:users": "bun seed.ts",
-    "seed:demo": "bun seed-demo-data.ts",
-    "seed": "bun seed.ts && bun seed-demo-data.ts"
+    "seed": "bun seed.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",
