@@ -1,8 +1,8 @@
-import { getRoleSections } from "../../role-data";
+import { getRoleSectionsFromDB } from "@/lib/role-queries";
 import { RoleSectionPage } from "../../role-section-page";
 
-export function generateStaticParams() {
-  return getRoleSections("owner").map((section) => ({ section }));
+export async function generateStaticParams() {
+  return (await getRoleSectionsFromDB("owner")).map((section) => ({ section }));
 }
 
 export default function OwnerSectionPage({

@@ -10,37 +10,31 @@ const demoUsers = [
     role: "Admin",
     email: "admin@minierp.local",
     password: demoPassword,
-    dashboardHref: "/dashboard/admin",
   },
   {
     role: "Sales User",
     email: "sales@minierp.local",
     password: demoPassword,
-    dashboardHref: "/dashboard/sales",
   },
   {
     role: "Purchase User",
     email: "purchase@minierp.local",
     password: demoPassword,
-    dashboardHref: "/dashboard/purchase",
   },
   {
     role: "Manufacturing User",
     email: "manufacturing@minierp.local",
     password: demoPassword,
-    dashboardHref: "/dashboard/manufacturing",
   },
   {
     role: "Inventory Manager",
     email: "inventory@minierp.local",
     password: demoPassword,
-    dashboardHref: "/dashboard/inventory",
   },
   {
     role: "Business Owner",
     email: "owner@minierp.local",
     password: demoPassword,
-    dashboardHref: "/dashboard/owner",
   },
 ];
 
@@ -51,6 +45,7 @@ export default function LoginForm() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState("");
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   function applyDemoUser(user: (typeof demoUsers)[number]) {
     setEmail(user.email);
@@ -60,19 +55,35 @@ export default function LoginForm() {
     setIsMenuOpen(false);
   }
 
-  function handleLogin(event: FormEvent<HTMLFormElement>) {
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setError("");
+    setIsLoading(true);
 
-    const user = demoUsers.find((demoUser) => {
-      return demoUser.email === email.trim().toLowerCase() && demoUser.password === password;
-    });
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          password,
+        }),
+      });
 
-    if (!user) {
-      setError("Choose a demo user or enter matching demo credentials.");
-      return;
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error ?? "Login failed. Please try again.");
+        return;
+      }
+
+      // Server set the HttpOnly cookie — redirect to the dashboard
+      router.push(data.redirectTo);
+    } catch {
+      setError("A network error occurred. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
-
-    router.push(user.dashboardHref);
   }
 
   return (
@@ -156,16 +167,20 @@ export default function LoginForm() {
       </div>
 
       {error ? (
-        <p className="rounded-lg border border-[#e4b7a3] bg-[#fff2eb] px-3 py-2 text-sm font-medium text-[#8b3d1e]" aria-live="polite">
+        <p
+          className="rounded-lg border border-[#e4b7a3] bg-[#fff2eb] px-3 py-2 text-sm font-medium text-[#8b3d1e]"
+          aria-live="polite"
+        >
           {error}
         </p>
       ) : null}
 
       <button
         type="submit"
-        className="mt-2 h-12 rounded-lg bg-[#176b5d] px-5 text-base font-semibold text-white shadow-sm transition hover:bg-[#12574b]"
+        disabled={isLoading}
+        className="mt-2 h-12 rounded-lg bg-[#176b5d] px-5 text-base font-semibold text-white shadow-sm transition hover:bg-[#12574b] disabled:opacity-60 disabled:cursor-not-allowed"
       >
-        Log in
+        {isLoading ? "Signing in…" : "Log in"}
       </button>
     </form>
   );
