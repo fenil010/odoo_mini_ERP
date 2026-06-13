@@ -27,6 +27,7 @@ import { getRoleBusinessData } from "@/lib/dashboard-data";
 import { getRoleDashboardFromDB, getRolePageFromDB } from "@/lib/role-queries";
 import { cn } from "@/lib/utils";
 import { type RoleKey, type SidebarIcon } from "./role-data";
+import { logout } from "@/app/actions/auth";
 
 type RoleWorkspaceProps = {
   role: RoleKey;
@@ -131,14 +132,17 @@ export async function RoleWorkspace({ role, section }: RoleWorkspaceProps) {
           </nav>
 
           <div className="mt-8 border-t border-[#ded4c3] pt-5">
-            <Link
-              href="/login"
-              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-[#cfc3ad] bg-white text-sm font-semibold text-[#24332d] shadow-sm transition hover:bg-[#fffaf0]"
-            >
-              <LogOut className="size-4" />
-              Log out
-            </Link>
+            <form action={logout}>
+              <button
+                type="submit"
+                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-[#cfc3ad] bg-white text-sm font-semibold text-[#24332d] shadow-sm transition hover:bg-[#fffaf0]"
+              >
+                <LogOut className="size-4" />
+                Log out
+              </button>
+            </form>
           </div>
+
         </aside>
 
         <section className="relative overflow-hidden px-4 py-6 sm:px-8 lg:px-10">
