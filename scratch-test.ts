@@ -1,18 +1,9 @@
-import { getNavbarData } from "./lib/dashboard-data";
-
+import { sql } from "./lib/db";
 async function main() {
-  console.log("=== SALES NOTIFICATIONS ===");
-  const sales = await getNavbarData("sales");
-  console.log(sales.notifications.map(n => ({ id: n.id, title: n.title, desc: n.desc })));
-
-  console.log("\n=== PURCHASE NOTIFICATIONS ===");
-  const purchase = await getNavbarData("purchase");
-  console.log(purchase.notifications.map(n => ({ id: n.id, title: n.title, desc: n.desc })));
-
+  const products = await sql`SELECT id, name, sku, procurement_type, product_type FROM products`;
+  console.log("PRODUCTS:", products);
+  const boms = await sql`SELECT b.id as bom_id, p.name as product, bi.quantity, p_comp.name as component FROM boms b JOIN products p ON p.id = b.product_id JOIN bom_items bi ON bi.bom_id = b.id JOIN products p_comp ON p_comp.id = bi.component_product_id`;
+  console.log("BOM ITEMS:", boms);
   process.exit(0);
 }
-
-main().catch(err => {
-  console.error(err);
-  process.exit(1);
-});
+main().catch(console.error);

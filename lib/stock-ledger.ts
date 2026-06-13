@@ -288,7 +288,7 @@ export async function startManufacturingOrderIfReady(tx: postgres.TransactionSql
       const lockedInventory = await tx`
         SELECT product_id, on_hand_qty, reserved_qty 
         FROM inventory 
-        WHERE product_id IN (${componentIds}) 
+        WHERE product_id = ANY(${componentIds}) 
         ORDER BY product_id ASC 
         FOR UPDATE
       `;
@@ -326,10 +326,10 @@ export async function startManufacturingOrderIfReady(tx: postgres.TransactionSql
       });
     }
 
-    // 2. Update MO status to IN_PROGRESS
+    // 2. Update MO status to READY
     await tx`
       UPDATE manufacturing_orders
-      SET status = 'IN_PROGRESS'
+      SET status = 'READY'
       WHERE id = ${moId}
     `;
 
@@ -338,9 +338,9 @@ export async function startManufacturingOrderIfReady(tx: postgres.TransactionSql
       userId,
       entityType: "manufacturing_orders",
       entityId: moId,
-      action: "AUTO_START",
+      action: "AUTO_READY",
       oldValue: { status: mo.status },
-      newValue: { status: "IN_PROGRESS" },
+      newValue: { status: "READY" },
     });
   } else {
     if (mo.status !== "WAITING_MATERIALS") {

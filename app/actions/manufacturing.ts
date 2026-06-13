@@ -132,6 +132,24 @@ export async function startManufacturingOrderAction(moId: number): Promise<Actio
         for (const item of bomItems) {
           const neededQty = Number(item.quantity) * Number(mo.quantity);
 
+          // Check if components were already reserved by the auto-readiness engine
+          const alreadyReservedResult = await tx`
+            SELECT COALESCE(SUM(quantity), 0)::numeric as total
+            FROM stock_ledger
+            WHERE reference_type = 'manufacturing_orders'
+              AND reference_id = ${moId}
+              AND product_id = ${item.component_product_id}
+              AND movement_type = 'MO_RESERVE'
+          `;
+          const alreadyReservedQty = Number(alreadyReservedResult[0]?.total || 0);
+
+          if (alreadyReservedQty >= neededQty) {
+            // Components already reserved by auto-readiness — skip to avoid double-reserve
+            continue;
+          }
+
+          const remainingToReserve = neededQty - alreadyReservedQty;
+
           await tx`
             INSERT INTO inventory (product_id, on_hand_qty, reserved_qty)
             VALUES (${item.component_product_id}, 0, 0)
@@ -145,17 +163,16 @@ export async function startManufacturingOrderAction(moId: number): Promise<Actio
             FOR UPDATE
           `;
           const inv = invResult[0] || { on_hand_qty: 0, reserved_qty: 0 };
-          const availableQty = inv.on_hand_qty - inv.reserved_qty;
+          const availableQty = Number(inv.on_hand_qty) - Number(inv.reserved_qty);
 
-          if (availableQty < neededQty) {
-            throw new Error(`Insufficient stock for component "${item.component_name}". Available: ${availableQty}, Needed: ${neededQty}.`);
+          if (availableQty < remainingToReserve) {
+            throw new Error(`Insufficient stock for component "${item.component_name}". Available: ${availableQty}, Needed: ${remainingToReserve}.`);
           }
 
-          const reserveQty = neededQty;
           await createLedgerEntry(tx, {
             productId: item.component_product_id,
             movementType: "MO_RESERVE",
-            quantity: reserveQty,
+            quantity: remainingToReserve,
             referenceType: "manufacturing_orders",
             referenceId: moId,
             notes: `Reserved component for MO ${mo.mo_number}`,

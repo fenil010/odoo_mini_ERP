@@ -39,17 +39,41 @@ export default async function SalesOrdersPage() {
       ) as items,
       COALESCE(
         (
-          SELECT json_agg(json_build_object('mo_number', mo.mo_number, 'quantity', mo.quantity, 'status', mo.status))
+          -- Fetch ALL manufacturing orders linked to this SO, with their parent linkage
+          SELECT json_agg(
+            json_build_object(
+              'id', mo.id,
+              'mo_number', mo.mo_number,
+              'quantity', mo.quantity,
+              'status', mo.status,
+              'product_name', mp.name,
+              'parent_manufacturing_order_id', mo.parent_manufacturing_order_id,
+              'child_pos', COALESCE((
+                SELECT json_agg(json_build_object(
+                  'po_number', po2.po_number,
+                  'status', po2.status,
+                  'product_name', pp2.name
+                ))
+                FROM purchase_orders po2
+                JOIN purchase_order_items poi2 ON poi2.purchase_order_id = po2.id
+                JOIN products pp2 ON pp2.id = poi2.product_id
+                WHERE po2.manufacturing_order_id = mo.id
+              ), '[]'::json)
+            ) ORDER BY mo.id ASC
+          )
           FROM manufacturing_orders mo
+          JOIN products mp ON mp.id = mo.product_id
           WHERE mo.sales_order_id = so.id
         ),
         '[]'
       ) as related_mos,
       COALESCE(
         (
+          -- Direct POs (not tied to an MO)
           SELECT json_agg(json_build_object('po_number', po.po_number, 'status', po.status))
           FROM purchase_orders po
           WHERE po.sales_order_id = so.id
+            AND po.manufacturing_order_id IS NULL
         ),
         '[]'
       ) as related_pos,
@@ -83,7 +107,10 @@ export default async function SalesOrdersPage() {
   `;
 
   const products = await sql<any[]>`
-    SELECT id, name, sku, sale_price FROM products ORDER BY name ASC
+    SELECT id, name, sku, sale_price 
+    FROM products 
+    WHERE id NOT IN (SELECT DISTINCT component_product_id FROM bom_items)
+    ORDER BY name ASC
   `;
 
   return (
