@@ -210,7 +210,7 @@ export const roleDashboards: Record<RoleKey, RoleDashboard> = {
     modules: ["Dashboard", "Products", "Sales Overview", "Inventory Health"],
   },
 };
-
+//fixing the code error
 export const roleOrder: RoleKey[] = [
   "admin",
   "sales",

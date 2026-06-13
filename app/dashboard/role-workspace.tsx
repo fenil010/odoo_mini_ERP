@@ -58,14 +58,14 @@ export async function RoleWorkspace({ role, section }: RoleWorkspaceProps) {
 
   const dashboard = roleDashboards[role];
   const currentPage = getRolePage(role, section) ?? getRolePage(role);
-  const businessData = await getRoleBusinessData(role);
+  const businessData = await getRoleBusinessData(role, section);
   const SummaryIcon = iconMap[dashboard.sidebarSections[0].items[0].icon];
   const isOverview = !section;
 
   return (
     <main className="min-h-screen bg-[#f7f4ed] text-[#1d2520]">
       <div className="mx-auto grid min-h-screen w-full max-w-[1500px] lg:grid-cols-[292px_1fr]">
-        <aside className="flex flex-col border-b border-[#ded4c3] bg-[#f7f4ed] px-4 py-5 text-[#1d2520] sm:px-6 lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto lg:border-b-0 lg:border-r">
+        <aside className="scrollbar-hidden flex flex-col border-b border-[#ded4c3] bg-[#f7f4ed] px-4 py-5 text-[#1d2520] sm:px-6 lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto lg:border-b-0 lg:border-r">
           <div>
             <Link href="/" className="flex items-center gap-3" aria-label="Mini ERP home">
               <span className="flex size-10 items-center justify-center rounded-lg bg-[#1f806f] text-sm font-bold text-white">
@@ -222,28 +222,30 @@ export async function RoleWorkspace({ role, section }: RoleWorkspaceProps) {
               </section>
             </div>
 
-            <section className="mt-6 overflow-hidden rounded-lg border border-[#d9cfbd] bg-white shadow-sm">
-              <div className="grid grid-cols-[80px_1fr_0.7fr_0.6fr] border-b border-[#e5dccb] bg-[#fbfaf6] px-4 py-3 text-xs font-semibold uppercase text-[#68756e]">
-                <span>Image</span>
-                <span>Product / SKU</span>
-                <span>Available</span>
-                <span>Status</span>
-              </div>
-              {businessData.stockItems.map((item) => (
-                <div
-                  key={item.name}
-                  className="grid grid-cols-[80px_1fr_0.7fr_0.6fr] gap-3 border-b border-[#efe7d8] px-4 py-4 text-sm last:border-b-0 items-center"
-                >
-                  <ProductImage src={item.imageUrl} alt={item.name} />
-                  <span>
-                    <span className="block font-semibold text-[#202a25]">{item.name}</span>
-                    <span className="mt-1 block text-xs text-[#68756e]">{item.detail}</span>
-                  </span>
-                  <span className="text-[#53645c]">{item.quantity}</span>
-                  <span className="font-semibold text-[#176b5d]">{item.status}</span>
+            {businessData.stockItems.length > 0 && (
+              <section className="mt-6 overflow-hidden rounded-lg border border-[#d9cfbd] bg-white shadow-sm">
+                <div className="grid grid-cols-[80px_1fr_0.7fr_0.6fr] border-b border-[#e5dccb] bg-[#fbfaf6] px-4 py-3 text-xs font-semibold uppercase text-[#68756e]">
+                  <span>Image</span>
+                  <span>Product / SKU</span>
+                  <span>Available</span>
+                  <span>Status</span>
                 </div>
-              ))}
-            </section>
+                {businessData.stockItems.map((item) => (
+                  <div
+                    key={item.name}
+                    className="grid grid-cols-[80px_1fr_0.7fr_0.6fr] gap-3 border-b border-[#efe7d8] px-4 py-4 text-sm last:border-b-0 items-center"
+                  >
+                    <ProductImage src={item.imageUrl} alt={item.name} />
+                    <span>
+                      <span className="block font-semibold text-[#202a25]">{item.name}</span>
+                      <span className="mt-1 block text-xs text-[#68756e]">{item.detail}</span>
+                    </span>
+                    <span className="text-[#53645c]">{item.quantity}</span>
+                    <span className="font-semibold text-[#176b5d]">{item.status}</span>
+                  </div>
+                ))}
+              </section>
+            )}
           </div>
         </section>
       </div>
