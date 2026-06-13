@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 
 type ProductImageProps = {
   alt: string;
@@ -21,7 +20,7 @@ export function ProductImage({ alt, src }: ProductImageProps) {
   }
 
   return (
-    <Image
+    <img
       src={supportedSrc}
       alt={alt}
       width={64}
@@ -37,14 +36,20 @@ function getSupportedImageUrl(src?: string | null) {
     return null;
   }
 
-  try {
-    const trimmedSrc = src.trim();
-    const url = new URL(trimmedSrc);
-
-    return url.protocol === "https:" && url.hostname === "images.unsplash.com"
-      ? trimmedSrc
-      : null;
-  } catch {
+  const trimmedSrc = src.trim();
+  if (!trimmedSrc) {
     return null;
   }
+
+  // Allow standard web protocols or local paths
+  if (
+    trimmedSrc.startsWith("http://") ||
+    trimmedSrc.startsWith("https://") ||
+    trimmedSrc.startsWith("/") ||
+    trimmedSrc.startsWith("data:")
+  ) {
+    return trimmedSrc;
+  }
+
+  return null;
 }

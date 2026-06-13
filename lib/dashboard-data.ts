@@ -36,6 +36,7 @@ type CountRow = {
 };
 
 type ProductRow = {
+  id: number;
   name: string;
   sku: string;
   sale_price: string | null;
@@ -45,6 +46,8 @@ type ProductRow = {
   reserved_qty: number | null;
   image_url: string | null;
   product_type: string | null;
+  open_demand_qty: number;
+  open_reserved_qty: number;
 };
 
 type VendorRow = {
@@ -169,7 +172,7 @@ export async function getRoleBusinessData(
   const salesTotal = salesOrders.reduce((sum, order) => sum + Number(order.total_amount ?? 0), 0);
   const purchaseTotal = purchaseOrders.reduce((sum, order) => sum + Number(order.total_amount ?? 0), 0);
   const reservedQty = products.reduce((sum, product) => sum + Number(product.reserved_qty ?? 0), 0);
-  const stockItems = products.slice(0, 5).map((product) => {
+  const stockItems = products.map((product) => {
     const available = availableQty(product);
 
     return {
@@ -886,7 +889,33 @@ function withEmptyState(items: DashboardItem[]) {
 
 async function getProducts() {
   return (await sql`
-    SELECT p.name, p.sku, p.sale_price, p.cost_price, p.procurement_type, i.on_hand_qty, i.reserved_qty, p.image_url, p.product_type
+    SELECT 
+      p.id,
+      p.name, 
+      p.sku, 
+      p.sale_price, 
+      p.cost_price, 
+      p.procurement_type, 
+      i.on_hand_qty, 
+      i.reserved_qty, 
+      p.image_url, 
+      p.product_type,
+      COALESCE((
+        SELECT SUM(soi.quantity)
+        FROM sales_order_items soi
+        JOIN sales_orders so ON so.id = soi.sales_order_id
+        WHERE soi.product_id = p.id
+          AND so.status IN ('CONFIRMED', 'WAITING_INVENTORY', 'READY_TO_DELIVER')
+      ), 0)::int AS open_demand_qty,
+      COALESCE((
+        SELECT SUM(sl.quantity)
+        FROM stock_ledger sl
+        JOIN sales_orders so ON so.id = sl.reference_id
+        WHERE sl.product_id = p.id
+          AND sl.reference_type = 'sales_orders'
+          AND sl.movement_type = 'SALES_RESERVE'
+          AND so.status IN ('CONFIRMED', 'WAITING_INVENTORY', 'READY_TO_DELIVER')
+      ), 0)::int AS open_reserved_qty
     FROM products p
     LEFT JOIN inventory i ON i.product_id = p.id
     ORDER BY p.procurement_type, p.name
@@ -1165,9 +1194,10 @@ function workOrderItem(workOrder: WorkOrderRow): DashboardItem {
 }
 
 function stockProductItem(product: ProductRow): DashboardItem {
+  const needed = Math.max(0, Number(product.open_demand_qty ?? 0) - Number(product.open_reserved_qty ?? 0));
   return {
     title: product.name,
-    description: product.sku ?? "No SKU",
+    description: `${product.sku ?? "No SKU"} • ${product.open_demand_qty ?? 0} ordered • ${needed} still needed`,
     status: `${availableQty(product)} available`,
   };
 }
