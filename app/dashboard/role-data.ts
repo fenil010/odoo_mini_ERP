@@ -1,3 +1,5 @@
+//this file handes the fole basae data 
+
 export type RoleKey =
   | "admin"
   | "sales"

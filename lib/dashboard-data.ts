@@ -383,7 +383,7 @@ function sumItems(rows: Array<{ item_count: number }>) {
 function formatMoney(amount: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: "USD",
+    currency: "inr",
     maximumFractionDigits: 0,
   }).format(amount);
 }

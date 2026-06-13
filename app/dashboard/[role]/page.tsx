@@ -161,13 +161,6 @@ export default async function RoleDashboardPage({ params }: RolePageProps) {
                     {dashboard.focus}
                   </p>
                 </div>
-
-                <div className="rounded-lg border border-[#d9cfbd] bg-white/90 px-4 py-3 shadow-sm">
-                  <p className="text-xs font-semibold uppercase text-[#68756e]">Access scope</p>
-                  <p className="mt-1 max-w-md text-sm font-semibold text-[#25332d]">
-                    {dashboard.modules.join(" / ")}
-                  </p>
-                </div>
               </div>
             </header>
 
