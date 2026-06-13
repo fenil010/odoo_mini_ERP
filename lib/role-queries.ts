@@ -21,35 +21,39 @@ export async function getRoleDashboardFromDB(
 
     const role = roleResult[0];
 
-    // Get menu sections for this role
-    const sectionsResult = await sql`
-      SELECT id, title, display_order
-      FROM role_menu_sections 
-      WHERE role_id = ${role.id}
-      ORDER BY display_order ASC
+    // Get menu sections and items in a single query to eliminate N+1 queries
+    const itemsResult = await sql`
+      SELECT 
+        rms.title as section_title,
+        rmi.label, 
+        rmi.href, 
+        rmi.description, 
+        rmi.icon
+      FROM role_menu_sections rms
+      LEFT JOIN role_menu_items rmi ON rmi.section_id = rms.id
+      WHERE rms.role_id = ${role.id}
+      ORDER BY rms.display_order ASC, rmi.display_order ASC
     `;
 
-    // Get menu items for each section
-    const sidebarSections = await Promise.all(
-      sectionsResult.map(async (section) => {
-        const itemsResult = await sql`
-          SELECT label, href, description, icon
-          FROM role_menu_items 
-          WHERE section_id = ${section.id}
-          ORDER BY display_order ASC
-        `;
-
-        return {
-          title: section.title,
-          items: itemsResult.map((item) => ({
-            label: item.label,
-            href: item.href,
-            description: item.description,
-            icon: item.icon,
-          })),
-        };
-      })
-    );
+    const sectionsMap = new Map<string, { title: string; items: any[] }>();
+    for (const row of itemsResult) {
+      const secTitle = row.section_title;
+      if (!sectionsMap.has(secTitle)) {
+        sectionsMap.set(secTitle, {
+          title: secTitle,
+          items: [],
+        });
+      }
+      if (row.label) {
+        sectionsMap.get(secTitle)!.items.push({
+          label: row.label,
+          href: row.href,
+          description: row.description,
+          icon: row.icon,
+        });
+      }
+    }
+    const sidebarSections = Array.from(sectionsMap.values());
 
     // Get modules for this role
     const modulesResult = await sql`

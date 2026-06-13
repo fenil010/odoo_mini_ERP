@@ -1,7 +1,27 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Plus, Search, Eye, Landmark, Trash2, Loader2, CheckCircle, PackageOpen } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { 
+  Plus, 
+  Search, 
+  Eye, 
+  Trash2, 
+  Loader2, 
+  CheckCircle, 
+  PackageOpen, 
+  X,
+  Truck,
+  TrendingUp,
+  DollarSign,
+  User,
+  Activity,
+  Layers,
+  ArrowRight,
+  Clock,
+  AlertTriangle,
+  Users
+} from "lucide-react";
 import { createPurchaseOrderAction, confirmPurchaseOrderAction, receivePurchaseOrderAction, cancelPurchaseOrderAction } from "@/app/actions/purchase";
 import StatusBadge from "@/app/components/ui/StatusBadge";
 import Modal from "@/app/components/ui/Modal";
@@ -48,14 +68,15 @@ type PurchaseOrdersClientProps = {
 
 export default function PurchaseOrdersClient({ initialOrders, vendors, products }: PurchaseOrdersClientProps) {
   const [orders, setOrders] = useState<PurchaseOrder[]>(initialOrders);
-  const [searchTerm, setSearchTerm] = useState("");
+  const searchParams = useSearchParams();
+  const [searchTerm, setSearchTerm] = useState(searchParams ? (searchParams.get("search") || "") : "");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
-
-  // Modals
+  // Modals & Drawer
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"ITEMS" | "JOURNEY">("ITEMS");
   const [selectedOrder, setSelectedOrder] = useState<PurchaseOrder | null>(null);
 
   // Form states
@@ -83,6 +104,17 @@ export default function PurchaseOrdersClient({ initialOrders, vendors, products 
     const matchesStatus = statusFilter === "ALL" || o.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  // KPI Calculations
+  const totalProcurementVal = orders.reduce((sum, o) => sum + Number(o.total_amount), 0);
+  const receivedVal = orders.filter((o) => o.status === "RECEIVED").reduce((sum, o) => sum + Number(o.total_amount), 0);
+  const pendingCount = orders.filter((o) => o.status === "CONFIRMED").length;
+
+  const counts = {
+    DRAFT: orders.filter((o) => o.status === "DRAFT").length,
+    CONFIRMED: orders.filter((o) => o.status === "CONFIRMED").length,
+    RECEIVED: orders.filter((o) => o.status === "RECEIVED").length,
+  };
 
   const totalOrderAmount = orderItems.reduce((sum, item) => sum + item.quantity * item.cost_price, 0);
 
@@ -137,7 +169,6 @@ export default function PurchaseOrdersClient({ initialOrders, vendors, products 
       if (res.error) setFormError(res.error);
       else {
         setIsAddOpen(false);
-        // Reset form
         const resetVendorId = vendors[0]?.id || 0;
         setSelectedVendorId(resetVendorId);
         const resetVendorProducts = products.filter((p) => p.vendor_ids?.includes(resetVendorId));
@@ -162,7 +193,7 @@ export default function PurchaseOrdersClient({ initialOrders, vendors, products 
 
       if (res?.error) alert(res.error);
       else {
-        setIsDetailOpen(false);
+        setIsDrawerOpen(false);
         window.location.reload();
       }
     });
@@ -226,11 +257,72 @@ export default function PurchaseOrdersClient({ initialOrders, vendors, products 
     setSelectedIds(next);
   };
 
+  const openDrawer = (order: PurchaseOrder) => {
+    setSelectedOrder(order);
+    setActiveTab("ITEMS");
+    setIsDrawerOpen(true);
+  };
 
   return (
     <div className="space-y-6">
-      {/* Top panel */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      
+      {/* Procurement KPIs */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div className="rounded-2xl border border-[#ded4c3] bg-white p-5 shadow-xs flex items-center justify-between hover:shadow-md transition-all duration-300">
+          <div>
+            <span className="text-[10px] font-bold text-[#68756e] uppercase tracking-wider">Total Committed Cost</span>
+            <h3 className="text-2xl font-bold text-[#18231f] mt-1">₹{totalProcurementVal.toLocaleString()}</h3>
+            <p className="text-[10px] text-[#53645c] mt-1">Total spend liabilities</p>
+          </div>
+          <div className="flex size-12 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-700">
+            <TrendingUp className="size-5" />
+          </div>
+        </div>
+        <div className="rounded-2xl border border-[#ded4c3] bg-white p-5 shadow-xs flex items-center justify-between hover:shadow-md transition-all duration-300">
+          <div>
+            <span className="text-[10px] font-bold text-[#68756e] uppercase tracking-wider">Acquired Assets Value</span>
+            <h3 className="text-2xl font-bold text-emerald-700 mt-1">₹{receivedVal.toLocaleString()}</h3>
+            <p className="text-[10px] text-[#53645c] mt-1">Stock received and warehouse checked</p>
+          </div>
+          <div className="flex size-12 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700">
+            <DollarSign className="size-5" />
+          </div>
+        </div>
+        <div className="rounded-2xl border border-[#ded4c3] bg-white p-5 shadow-xs flex items-center justify-between hover:shadow-md transition-all duration-300">
+          <div>
+            <span className="text-[10px] font-bold text-[#68756e] uppercase tracking-wider">Pending Arrivals</span>
+            <h3 className="text-2xl font-bold text-indigo-600 mt-1">{pendingCount} POs</h3>
+            <p className="text-[10px] text-[#53645c] mt-1">Active supplier shipments in route</p>
+          </div>
+          <div className="flex size-12 items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700">
+            <Truck className="size-5" />
+          </div>
+        </div>
+      </div>
+
+      {/* Procurement Pipeline */}
+      <div className="rounded-2xl border border-[#ded4c3] bg-white p-5 shadow-xs">
+        <h3 className="text-xs font-bold text-[#18231f] uppercase tracking-wider mb-4 flex items-center gap-1.5">
+          <Layers className="size-4 text-[#1f806f]" /> Supply Chain Pipeline
+        </h3>
+        <div className="grid grid-cols-3 divide-x divide-[#ded4c3] text-center text-xs">
+          <div className="px-2">
+            <span className="text-[10px] font-bold text-[#68756e] uppercase">Draft Request</span>
+            <p className="mt-1 text-lg font-bold text-[#18231f]">{counts.DRAFT}</p>
+          </div>
+          <div className="px-2">
+            <span className="text-[10px] font-bold text-[#68756e] uppercase">Confirmed (Transit)</span>
+            <p className="mt-1 text-lg font-bold text-blue-600">{counts.CONFIRMED}</p>
+          </div>
+          <div className="px-2">
+            <span className="text-[10px] font-bold text-[#68756e] uppercase">Received (Stocked)</span>
+            <p className="mt-1 text-lg font-bold text-emerald-600">{counts.RECEIVED}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Action panel controls */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#ded4c3] pb-5">
         <div className="flex flex-1 flex-wrap gap-3">
           <div className="relative w-full max-w-xs">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#68756e]" />
@@ -261,7 +353,7 @@ export default function PurchaseOrdersClient({ initialOrders, vendors, products 
             setFormError("");
             setIsAddOpen(true);
           }}
-          className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#176b5d] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[#12574b]"
+          className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#1f806f] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[#176b5d]"
         >
           <Plus className="size-4" />
           Create Purchase Order
@@ -271,14 +363,14 @@ export default function PurchaseOrdersClient({ initialOrders, vendors, products 
       {/* Bulk actions bar */}
       {selectedIds.size > 0 && (
         <div className="flex items-center justify-between rounded-lg border border-[#c9dbd5] bg-[#eef7f3] px-4 py-3 text-sm text-[#176b5d]">
-          <div className="font-semibold">{selectedIds.size} order(s) selected</div>
+          <div className="font-bold">{selectedIds.size} order(s) selected</div>
           <div className="flex gap-3">
             {filteredOrders.some((o) => selectedIds.has(o.id) && o.status === "DRAFT") && (
               <button
                 type="button"
                 disabled={isPending}
                 onClick={() => handleBulkAction("CONFIRM")}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#176b5d] px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#12574b]"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#1f806f] px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#176b5d]"
               >
                 {isPending ? <Loader2 className="size-3 animate-spin" /> : <CheckCircle className="size-3" />}
                 Bulk Confirm
@@ -315,9 +407,9 @@ export default function PurchaseOrdersClient({ initialOrders, vendors, products 
           onAction={() => setIsAddOpen(true)}
         />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-[#d9cfbd] bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-2xl border border-[#ded4c3] bg-white shadow-xs">
           <table className="w-full border-collapse text-left text-sm text-[#18231f]">
-            <thead className="border-b border-[#e5dccb] bg-[#fbfaf6] text-xs font-semibold uppercase tracking-wider text-[#68756e]">
+            <thead className="border-b border-[#ded4c3] bg-[#fbfaf6] text-xs font-bold uppercase tracking-wider text-[#68756e]">
               <tr>
                 <th className="px-6 py-4 w-12 text-center">
                   <input
@@ -327,35 +419,35 @@ export default function PurchaseOrdersClient({ initialOrders, vendors, products 
                       selectedIds.size === checkableOrders.length
                     }
                     onChange={handleToggleSelectAll}
-                    className="rounded border-[#cfc3ad] text-[#176b5d] focus:ring-[#176b5d]"
+                    className="rounded border-[#cfc3ad] text-[#176b5d] focus:ring-[#1f806f]"
                   />
                 </th>
                 <th className="px-6 py-4">PO Number</th>
                 <th className="px-6 py-4">Vendor</th>
-                <th className="px-6 py-4">Date</th>
+                <th className="px-6 py-4">Date Placed</th>
                 <th className="px-6 py-4">Status</th>
                 <th className="px-6 py-4 text-right">Items</th>
                 <th className="px-6 py-4 text-right">Total Cost</th>
-                <th className="px-6 py-4 text-center">Actions</th>
+                <th className="px-6 py-4 text-center">Details</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#efe7d8]">
+            <tbody className="divide-y divide-[#f3ebdd]">
               {filteredOrders.map((o) => {
                 const isCheckable = o.status === "DRAFT" || o.status === "CONFIRMED";
                 return (
-                  <tr key={o.id} className="hover:bg-white/60 transition-colors">
+                  <tr key={o.id} className="hover:bg-[#fbfaf6]/50 transition-colors">
                     <td className="px-6 py-4 text-center">
                       {isCheckable ? (
                         <input
                           type="checkbox"
                           checked={selectedIds.has(o.id)}
                           onChange={() => handleToggleSelect(o.id)}
-                          className="rounded border-[#cfc3ad] text-[#176b5d] focus:ring-[#176b5d]"
+                          className="rounded border-[#cfc3ad] text-[#176b5d] focus:ring-[#1f806f]"
                         />
                       ) : null}
                     </td>
-                    <td className="px-6 py-4 font-mono font-semibold text-[#176b5d]">{o.po_number}</td>
-                    <td className="px-6 py-4 font-semibold text-[#202a25]">{o.vendor_name}</td>
+                    <td className="px-6 py-4 font-mono font-bold text-[#1f806f]">{o.po_number}</td>
+                    <td className="px-6 py-4 font-bold text-[#202a25]">{o.vendor_name}</td>
                     <td className="px-6 py-4 text-[#53645c]">
                       {new Date(o.created_at).toLocaleDateString("en-US", {
                         month: "short",
@@ -366,21 +458,18 @@ export default function PurchaseOrdersClient({ initialOrders, vendors, products 
                     <td className="px-6 py-4">
                       <StatusBadge status={o.status} />
                     </td>
-                    <td className="px-6 py-4 text-right text-[#53645c] font-medium">{o.item_count}</td>
-                    <td className="px-6 py-4 text-right font-semibold text-[#202a25]">
+                    <td className="px-6 py-4 text-right text-[#53645c] font-semibold">{o.item_count}</td>
+                    <td className="px-6 py-4 text-right font-bold text-[#202a25]">
                       ₹{Number(o.total_amount).toFixed(2)}
                     </td>
                     <td className="px-6 py-4 text-center">
                       <button
                         type="button"
-                        onClick={() => {
-                          setSelectedOrder(o);
-                          setIsDetailOpen(true);
-                        }}
-                        className="inline-flex items-center gap-1 rounded-lg border border-[#cfc3ad] bg-white px-2.5 py-1 text-xs font-semibold text-[#24332d] shadow-xs transition hover:bg-[#fffaf0]"
+                        onClick={() => openDrawer(o)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-[#cfc3ad] bg-white px-2.5 py-1.5 text-xs font-bold text-[#405049] hover:bg-[#fffaf0] transition-colors"
                       >
                         <Eye className="size-3.5" />
-                        View
+                        Inspect
                       </button>
                     </td>
                   </tr>
@@ -388,6 +477,200 @@ export default function PurchaseOrdersClient({ initialOrders, vendors, products 
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Stripe Style Slide-over Drawer */}
+      {isDrawerOpen && selectedOrder && (
+        <div className="fixed inset-0 z-50 overflow-hidden bg-black/40 backdrop-blur-xs">
+          <div className="absolute inset-y-0 right-0 flex max-w-full pl-10">
+            <div className="w-screen max-w-2xl bg-white shadow-2xl border-l border-[#ded4c3] flex flex-col justify-between animate-in slide-in-from-right duration-300">
+              
+              {/* Header */}
+              <div className="border-b border-[#f3ebdd] px-6 py-5 bg-[#fbfaf6]">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-[#68756e] uppercase tracking-wider">
+                      Purchase Order Details
+                    </span>
+                    <h2 className="text-2xl font-bold text-[#18231f] mt-1 flex items-center gap-2">
+                      {selectedOrder.po_number}
+                      <StatusBadge status={selectedOrder.status} />
+                    </h2>
+                  </div>
+                  <button
+                    onClick={() => setIsDrawerOpen(false)}
+                    className="rounded-lg border border-[#cfc3ad] bg-white p-1.5 text-[#53645c] hover:bg-[#fffaf0] transition"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </div>
+
+                {/* Progress bar journey */}
+                <div className="mt-6 flex items-center justify-between text-[10px] font-bold text-[#68756e] uppercase">
+                  <span className={selectedOrder.status !== "CANCELLED" ? "text-[#1f806f]" : "text-gray-400"}>1. Request Draft</span>
+                  <ArrowRight className="size-3 text-[#ded4c3]" />
+                  <span className={["CONFIRMED", "RECEIVED"].includes(selectedOrder.status) ? "text-[#1f806f]" : "text-gray-400"}>2. Confirmed (Transit)</span>
+                  <ArrowRight className="size-3 text-[#ded4c3]" />
+                  <span className={selectedOrder.status === "RECEIVED" ? "text-[#1f806f]" : "text-gray-400"}>3. Received & Stocked</span>
+                </div>
+              </div>
+
+              {/* Tab Navigation */}
+              <div className="flex border-b border-[#f3ebdd] px-6 text-xs font-bold text-[#68756e] bg-white">
+                <button
+                  onClick={() => setActiveTab("ITEMS")}
+                  className={`border-b-2 py-3.5 px-4 -mb-px transition ${activeTab === "ITEMS" ? "border-[#1f806f] text-[#1f806f]" : "border-transparent hover:text-[#18231f]"}`}
+                >
+                  Items & Pricing
+                </button>
+                <button
+                  onClick={() => setActiveTab("JOURNEY")}
+                  className={`border-b-2 py-3.5 px-4 -mb-px transition ${activeTab === "JOURNEY" ? "border-[#1f806f] text-[#1f806f]" : "border-transparent hover:text-[#18231f]"}`}
+                >
+                  Procurement Timeline
+                </button>
+              </div>
+
+              {/* Main Content Area */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                
+                {activeTab === "ITEMS" && (
+                  <div className="space-y-6">
+                    {/* Supplier Information Card */}
+                    <div className="rounded-xl border border-[#ded4c3] p-4 bg-white flex gap-4 items-center">
+                      <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <Users className="size-5" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-[#68756e] uppercase">Supplier Partner</p>
+                        <p className="font-bold text-[#202a25] text-sm mt-0.5">{selectedOrder.vendor_name}</p>
+                      </div>
+                    </div>
+
+                    {/* PO Items Table */}
+                    <div className="space-y-3">
+                      <h4 className="text-xs font-bold text-[#18231f] uppercase tracking-wider">Purchase Lines</h4>
+                      <div className="rounded-xl border border-[#ded4c3] overflow-hidden bg-white">
+                        <table className="w-full text-left text-xs text-[#18231f]">
+                          <thead className="bg-[#fbfaf6] text-[#68756e] font-bold border-b border-[#ded4c3] uppercase">
+                            <tr>
+                              <th className="px-4 py-3">Product Name</th>
+                              <th className="px-4 py-3 text-right">Quantity Ordered</th>
+                              <th className="px-4 py-3 text-right">Cost Price</th>
+                              <th className="px-4 py-3 text-right">Subtotal Cost</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#f3ebdd]">
+                            {selectedOrder.items.map((item, idx) => (
+                              <tr key={idx} className="hover:bg-[#fbfaf6]/50">
+                                  <td className="px-4 py-3">
+                                    <p className="font-bold text-[#202a25]">{item.product_name}</p>
+                                    <p className="text-[10px] text-[#68756e] font-mono mt-0.5">{item.sku}</p>
+                                  </td>
+                                  <td className="px-4 py-3 text-right font-bold text-[#53645c]">{item.quantity}</td>
+                                  <td className="px-4 py-3 text-right text-[#53645c]">₹{Number(item.cost_price).toFixed(2)}</td>
+                                  <td className="px-4 py-3 text-right font-bold text-[#202a25]">
+                                    ₹{(item.quantity * item.cost_price).toFixed(2)}
+                                  </td>
+                                </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === "JOURNEY" && (
+                  <div className="space-y-6">
+                    <h4 className="text-xs font-bold text-[#18231f] uppercase tracking-wider">Purchase Status Journey</h4>
+                    <div className="relative pl-4 border-l border-[#ded4c3] space-y-4 text-xs">
+                      <div className="relative">
+                        <span className="absolute -left-[20.5px] top-1 flex size-2.5 items-center justify-center rounded-full bg-[#1f806f]" />
+                        <span className="text-[10px] font-bold text-[#68756e]">Date: {new Date(selectedOrder.created_at).toLocaleDateString()}</span>
+                        <p className="font-bold text-[#202a25] mt-0.5">PO Document Initialized</p>
+                        <p className="text-[#53645c] mt-0.5">Procurement draft request generated in DRAFT state.</p>
+                      </div>
+                      
+                      {selectedOrder.status !== "DRAFT" && (
+                        <div className="relative">
+                          <span className="absolute -left-[20.5px] top-1 flex size-2.5 items-center justify-center rounded-full bg-blue-600" />
+                          <span className="text-[10px] font-bold text-[#68756e]">Processing</span>
+                          <p className="font-bold text-[#202a25] mt-0.5">Supplier Dispatch Confirmed</p>
+                          <p className="text-[#53645c] mt-0.5">Procurement details approved. Awaiting material receipt check-in.</p>
+                        </div>
+                      )}
+
+                      {selectedOrder.status === "RECEIVED" && (
+                        <div className="relative">
+                          <span className="absolute -left-[20.5px] top-1 flex size-2.5 items-center justify-center rounded-full bg-emerald-600" />
+                          <span className="text-[10px] font-bold text-[#68756e]">Completed</span>
+                          <p className="font-bold text-[#202a25] mt-0.5">Materials Stocked In Warehouse</p>
+                          <p className="text-[#53645c] mt-0.5">Inventory levels incremented in PostgreSQL ledger.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+              </div>
+
+              {/* Drawer Footer Actions */}
+              <div className="border-t border-[#f3ebdd] p-5 bg-[#fbfaf6] flex items-center justify-between">
+                <div className="text-left">
+                  <span className="text-[10px] font-bold text-[#68756e] uppercase">Total Cost</span>
+                  <p className="text-xl font-bold text-[#18231f]">₹{Number(selectedOrder.total_amount).toFixed(2)}</p>
+                </div>
+                <div className="flex gap-2">
+                  {(selectedOrder.status === "DRAFT" || selectedOrder.status === "CONFIRMED") && (
+                    <button
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => handleAction("CANCEL", selectedOrder.id)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-xs font-bold text-red-700 hover:bg-red-100 transition"
+                    >
+                      <Trash2 className="size-4" />
+                      Cancel Order
+                    </button>
+                  )}
+
+                  {selectedOrder.status === "DRAFT" && (
+                    <button
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => handleAction("CONFIRM", selectedOrder.id)}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-[#1f806f] px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[#176b5d]"
+                    >
+                      {isPending ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <CheckCircle className="size-4" />
+                      )}
+                      Confirm Order
+                    </button>
+                  )}
+
+                  {selectedOrder.status === "CONFIRMED" && (
+                    <button
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => handleAction("RECEIVE", selectedOrder.id)}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700"
+                    >
+                      {isPending ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <PackageOpen className="size-4" />
+                      )}
+                      Receive Materials
+                    </button>
+                  )}
+                </div>
+              </div>
+
+            </div>
+          </div>
         </div>
       )}
 
@@ -424,7 +707,7 @@ export default function PurchaseOrdersClient({ initialOrders, vendors, products 
               <button
                 type="button"
                 onClick={addOrderItem}
-                className="text-xs font-bold text-[#176b5d] hover:underline"
+                className="text-xs font-bold text-[#1f806f] hover:underline"
               >
                 + Add Item
               </button>
@@ -486,7 +769,7 @@ export default function PurchaseOrdersClient({ initialOrders, vendors, products 
 
           <div className="flex justify-between items-center border-t border-[#e5dccb] pt-4 font-bold text-[#18231f]">
             <span>Total Cost:</span>
-            <span className="text-xl text-[#176b5d]">₹{totalOrderAmount.toFixed(2)}</span>
+            <span className="text-xl text-[#1f806f]">₹{totalOrderAmount.toFixed(2)}</span>
           </div>
 
           {formError && (
@@ -506,7 +789,7 @@ export default function PurchaseOrdersClient({ initialOrders, vendors, products 
             <button
               type="submit"
               disabled={isPending}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#176b5d] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#12574b] disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-lg bg-[#1f806f] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#176b5d] disabled:opacity-60"
             >
               {isPending && <Loader2 className="size-4 animate-spin" />}
               Create Order
@@ -515,119 +798,6 @@ export default function PurchaseOrdersClient({ initialOrders, vendors, products 
         </form>
       </Modal>
 
-      {/* PO Detail Modal */}
-      {selectedOrder && (
-        <Modal isOpen={isDetailOpen} onClose={() => setIsDetailOpen(false)} title={`Purchase Order: ${selectedOrder.po_number}`}>
-          <div className="space-y-6">
-            <div className="flex justify-between items-start border-b border-[#e5dccb] pb-4">
-              <div>
-                <p className="text-xs font-semibold uppercase text-[#68756e]">Vendor / Supplier</p>
-                <p className="text-base font-bold text-[#202a25] mt-0.5">{selectedOrder.vendor_name}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs font-semibold uppercase text-[#68756e]">Status</p>
-                <div className="mt-0.5">
-                  <StatusBadge status={selectedOrder.status} />
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <p className="text-xs font-bold uppercase text-[#405049] mb-3">Order Items</p>
-              <div className="rounded-lg border border-[#efe7d8] overflow-hidden bg-white">
-                <table className="w-full text-left text-xs text-[#18231f]">
-                  <thead className="bg-[#fbfaf6] text-[#68756e] font-semibold border-b border-[#efe7d8] uppercase">
-                    <tr>
-                      <th className="px-4 py-2">Product Name</th>
-                      <th className="px-4 py-2 text-right">Quantity</th>
-                      <th className="px-4 py-2 text-right">Cost Price</th>
-                      <th className="px-4 py-2 text-right">Subtotal</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#efe7d8]">
-                    {selectedOrder.items.map((item, idx) => (
-                      <tr key={idx}>
-                        <td className="px-4 py-2">
-                          <p className="font-semibold text-[#202a25]">{item.product_name}</p>
-                          <p className="text-[10px] text-[#68756e] font-mono">{item.sku}</p>
-                        </td>
-                        <td className="px-4 py-2 text-right text-[#53645c] font-medium">{item.quantity}</td>
-                        <td className="px-4 py-2 text-right text-[#53645c]">₹{Number(item.cost_price).toFixed(2)}</td>
-                        <td className="px-4 py-2 text-right font-semibold text-[#202a25]">
-                          ₹{(item.quantity * item.cost_price).toFixed(2)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center border-t border-[#e5dccb] pt-4">
-              <span className="text-sm font-bold text-[#18231f]">Total Cost:</span>
-              <span className="text-xl font-bold text-[#176b5d]">₹{Number(selectedOrder.total_amount).toFixed(2)}</span>
-            </div>
-
-            <div className="flex justify-end gap-3 border-t border-[#e5dccb] pt-4">
-              {(selectedOrder.status === "DRAFT" || selectedOrder.status === "CONFIRMED") && (
-                <button
-                  type="button"
-                  disabled={isPending}
-                  onClick={() => handleAction("CANCEL", selectedOrder.id)}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
-                >
-                  {isPending ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="size-4" />
-                  )}
-                  Cancel Order
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => setIsDetailOpen(false)}
-                className="rounded-lg border border-[#cfc3ad] bg-white px-4 py-2 text-sm font-semibold text-[#24332d] shadow-sm transition hover:bg-[#fffaf0]"
-              >
-                Close
-              </button>
-
-              {selectedOrder.status === "DRAFT" && (
-                <button
-                  type="button"
-                  disabled={isPending}
-                  onClick={() => handleAction("CONFIRM", selectedOrder.id)}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#176b5d] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#12574b]"
-                >
-                  {isPending ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <CheckCircle className="size-4" />
-                  )}
-                  Confirm Order
-                </button>
-              )}
-
-              {selectedOrder.status === "CONFIRMED" && (
-                <button
-                  type="button"
-                  disabled={isPending}
-                  onClick={() => handleAction("RECEIVE", selectedOrder.id)}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-                >
-                  {isPending ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <PackageOpen className="size-4" />
-                  )}
-                  Receive Materials
-                </button>
-              )}
-            </div>
-          </div>
-        </Modal>
-      )}
     </div>
   );
 }

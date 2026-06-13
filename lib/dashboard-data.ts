@@ -1,5 +1,6 @@
 import type { RoleKey } from "@/app/dashboard/role-data";
 import { sql } from "@/lib/db";
+import { unstable_noStore as noStore } from "next/cache";
 
 export type DashboardMetric = {
   label: string;
@@ -48,6 +49,10 @@ type ProductRow = {
   product_type: string | null;
   open_demand_qty: number;
   open_reserved_qty: number;
+  shipping_charge: string | null;
+  packing_charge: string | null;
+  manufacturing_charge: string | null;
+  other_charge: string | null;
 };
 
 type VendorRow = {
@@ -134,6 +139,134 @@ export async function getRoleBusinessData(
   role: RoleKey,
   section?: string,
 ): Promise<RoleBusinessData> {
+  const needed = new Set<string>();
+  const key = section ? `${role}/${section}` : role;
+
+  if (section) {
+    switch (key) {
+      case "admin/users-roles":
+      case "admin/permissions":
+        needed.add("users");
+        break;
+      case "admin/system-settings":
+        needed.add("products").add("users");
+        break;
+      case "admin/audit-logs":
+        needed.add("auditLogs");
+        break;
+      case "admin/master-data":
+        needed.add("products").add("customers").add("vendors");
+        break;
+      case "admin/all-modules":
+        needed.add("salesOrders").add("purchaseOrders").add("manufacturingOrders")
+              .add("stockLedger").add("products").add("users").add("auditLogs");
+        break;
+      case "sales/customers":
+        needed.add("customers").add("salesOrders");
+        break;
+      case "sales/sales-orders":
+        needed.add("salesOrders").add("customers");
+        break;
+      case "sales/order-items":
+        needed.add("salesOrderItems").add("products");
+        break;
+      case "sales/shortages":
+        needed.add("products").add("salesOrders");
+        break;
+      case "sales/delivery-status":
+        needed.add("salesOrders").add("products");
+        break;
+      case "purchase/vendors":
+        needed.add("vendors").add("purchaseOrders");
+        break;
+      case "purchase/purchase-orders":
+        needed.add("purchaseOrders").add("vendors");
+        break;
+      case "purchase/purchase-items":
+        needed.add("purchaseOrderItems").add("products");
+        break;
+      case "purchase/incoming-stock":
+        needed.add("purchaseOrders").add("purchaseOrderItems");
+        break;
+      case "purchase/shortage-demand":
+        needed.add("products").add("purchaseOrders");
+        break;
+      case "manufacturing/manufacturing-orders":
+      case "manufacturing/completion-queue":
+        needed.add("manufacturingOrders").add("workOrders");
+        break;
+      case "manufacturing/work-orders":
+        needed.add("workOrders").add("manufacturingOrders");
+        break;
+      case "manufacturing/bom-planning":
+        needed.add("bomItems").add("products");
+        break;
+      case "manufacturing/material-readiness":
+        needed.add("products").add("manufacturingOrders");
+        break;
+      case "inventory/on-hand-stock":
+        needed.add("products");
+        break;
+      case "inventory/reserved-stock":
+        needed.add("products").add("salesOrders");
+        break;
+      case "inventory/stock-ledger":
+        needed.add("stockLedger").add("products");
+        break;
+      case "inventory/receive-materials":
+        needed.add("stockLedger").add("purchaseOrders").add("purchaseOrderItems").add("products");
+        break;
+      case "inventory/deliver-products":
+        needed.add("stockLedger").add("salesOrders").add("products");
+        break;
+      case "owner/revenue-view":
+        needed.add("salesOrders").add("customers");
+        break;
+      case "owner/product-master":
+        needed.add("products").add("vendors");
+        break;
+      case "owner/stock-risk":
+        needed.add("products").add("salesOrders");
+        break;
+      case "owner/production-load":
+        needed.add("manufacturingOrders").add("workOrders");
+        break;
+      case "owner/delayed-orders":
+        needed.add("salesOrders").add("manufacturingOrders").add("purchaseOrders").add("products");
+        break;
+    }
+  } else {
+    if (role === "admin") {
+      needed.add("usersCount").add("products").add("auditLogs").add("vendors");
+    } else if (role === "sales") {
+      needed.add("customersCount").add("salesOrders").add("products");
+    } else if (role === "purchase") {
+      needed.add("vendors").add("purchaseOrders");
+    } else if (role === "manufacturing") {
+      needed.add("manufacturingOrders").add("workOrders").add("products");
+    } else if (role === "inventory") {
+      needed.add("products").add("stockLedger");
+    } else {
+      needed.add("salesOrders").add("purchaseOrders").add("products");
+    }
+  }
+
+  const productsPromise = needed.has("products") ? getProducts() : Promise.resolve([]);
+  const vendorsPromise = needed.has("vendors") ? getVendors() : Promise.resolve([]);
+  const salesOrdersPromise = needed.has("salesOrders") ? getSalesOrders() : Promise.resolve([]);
+  const purchaseOrdersPromise = needed.has("purchaseOrders") ? getPurchaseOrders() : Promise.resolve([]);
+  const manufacturingOrdersPromise = needed.has("manufacturingOrders") ? getManufacturingOrders() : Promise.resolve([]);
+  const workOrdersPromise = needed.has("workOrders") ? getWorkOrders() : Promise.resolve([]);
+  const stockLedgerPromise = needed.has("stockLedger") ? getStockLedger() : Promise.resolve([]);
+  const auditLogsPromise = needed.has("auditLogs") ? getAuditLogs() : Promise.resolve([]);
+  const usersCountPromise = needed.has("usersCount") ? getCount("users") : Promise.resolve(0);
+  const customersCountPromise = needed.has("customersCount") ? getCount("customers") : Promise.resolve(0);
+  const usersPromise = needed.has("users") ? getUsers() : Promise.resolve([]);
+  const customersPromise = needed.has("customers") ? getCustomers() : Promise.resolve([]);
+  const salesOrderItemsPromise = needed.has("salesOrderItems") ? getSalesOrderItems() : Promise.resolve([]);
+  const purchaseOrderItemsPromise = needed.has("purchaseOrderItems") ? getPurchaseOrderItems() : Promise.resolve([]);
+  const bomItemsPromise = needed.has("bomItems") ? getBomItems() : Promise.resolve([]);
+
   const [
     products,
     vendors,
@@ -151,21 +284,21 @@ export async function getRoleBusinessData(
     purchaseOrderItems,
     bomItems,
   ] = await Promise.all([
-    getProducts(),
-    getVendors(),
-    getSalesOrders(),
-    getPurchaseOrders(),
-    getManufacturingOrders(),
-    getWorkOrders(),
-    getStockLedger(),
-    getAuditLogs(),
-    getCount("users"),
-    getCount("customers"),
-    getUsers(),
-    getCustomers(),
-    getSalesOrderItems(),
-    getPurchaseOrderItems(),
-    getBomItems(),
+    productsPromise,
+    vendorsPromise,
+    salesOrdersPromise,
+    purchaseOrdersPromise,
+    manufacturingOrdersPromise,
+    workOrdersPromise,
+    stockLedgerPromise,
+    auditLogsPromise,
+    usersCountPromise,
+    customersCountPromise,
+    usersPromise,
+    customersPromise,
+    salesOrderItemsPromise,
+    purchaseOrderItemsPromise,
+    bomItemsPromise,
   ]);
 
   const lowStock = products.filter((product) => availableQty(product) <= 5).length;
@@ -900,6 +1033,10 @@ async function getProducts() {
       i.reserved_qty, 
       p.image_url, 
       p.product_type,
+      p.shipping_charge,
+      p.packing_charge,
+      p.manufacturing_charge,
+      p.other_charge,
       COALESCE((
         SELECT SUM(soi.quantity)
         FROM sales_order_items soi
@@ -1273,4 +1410,241 @@ function sumOrderValue(orders: Array<{ total_amount: string | null }>): number {
 function averageOrderValue(orders: Array<{ total_amount: string | null }>): number {
   if (orders.length === 0) return 0;
   return sumOrderValue(orders) / orders.length;
+}
+
+export type NavbarApproval = {
+  id: number;
+  title: string;
+  desc: string;
+  time: string;
+  action: string;
+  type: "sales" | "purchase" | "manufacturing";
+};
+
+export type NavbarNotification = {
+  id: string;
+  title: string;
+  desc: string;
+  time: string;
+  type: "warning" | "success" | "info";
+};
+
+export async function getNavbarData(role: RoleKey): Promise<{
+  approvals: NavbarApproval[];
+  notifications: NavbarNotification[];
+}> {
+  try {
+    noStore();
+    const isExecutive = role === "owner" || role === "admin";
+    
+    // Determine which approvals queries to run
+    const salesPromise = (isExecutive || role === "sales")
+      ? (sql`
+          SELECT so.id, so.order_number, c.name AS customer_name,
+            COALESCE(SUM(soi.quantity * soi.price), 0)::text AS total_amount,
+            COUNT(soi.id)::int AS item_count,
+            so.created_at
+          FROM sales_orders so
+          LEFT JOIN customers c ON c.id = so.customer_id
+          LEFT JOIN sales_order_items soi ON soi.sales_order_id = so.id
+          WHERE so.status = 'DRAFT'
+          GROUP BY so.id, c.name, so.created_at
+          ORDER BY so.created_at DESC
+        ` as unknown as Array<{ id: number; order_number: string; customer_name: string | null; total_amount: string; item_count: number; created_at: Date }>)
+      : Promise.resolve([]);
+
+    const purchasePromise = (isExecutive || role === "purchase")
+      ? (sql`
+          SELECT po.id, po.po_number, v.name AS vendor_name,
+            COALESCE(SUM(poi.quantity * poi.cost_price), 0)::text AS total_amount,
+            COUNT(poi.id)::int AS item_count,
+            po.created_at
+          FROM purchase_orders po
+          LEFT JOIN vendors v ON v.id = po.vendor_id
+          LEFT JOIN purchase_order_items poi ON poi.purchase_order_id = po.id
+          WHERE po.status = 'DRAFT'
+          GROUP BY po.id, v.name, po.created_at
+          ORDER BY po.created_at DESC
+        ` as unknown as Array<{ id: number; po_number: string; vendor_name: string | null; total_amount: string; item_count: number; created_at: Date }>)
+      : Promise.resolve([]);
+
+    const manufacturingPromise = (isExecutive || role === "manufacturing")
+      ? (sql`
+          SELECT mo.id, mo.mo_number, p.name AS product_name, mo.quantity, mo.created_at
+          FROM manufacturing_orders mo
+          LEFT JOIN products p ON p.id = mo.product_id
+          WHERE mo.status = 'READY'
+          ORDER BY mo.created_at DESC
+        ` as unknown as Array<{ id: number; mo_number: string; product_name: string; quantity: number; created_at: Date }>)
+      : Promise.resolve([]);
+
+    // Determine which notifications queries to run
+    const lowStockPromise = (isExecutive || role === "inventory")
+      ? (sql`
+          SELECT p.id, p.name, p.sku, i.on_hand_qty, i.reserved_qty
+          FROM products p
+          JOIN inventory i ON i.product_id = p.id
+          WHERE (i.on_hand_qty - i.reserved_qty) <= 5
+          ORDER BY (i.on_hand_qty - i.reserved_qty) ASC
+        ` as unknown as Array<{ id: number; name: string; sku: string; on_hand_qty: number; reserved_qty: number }>)
+      : Promise.resolve([]);
+
+    // Audit logs role filter
+    let logsFilter = sql``;
+    if (role === "sales") {
+      logsFilter = sql`WHERE al.entity_type IN ('sales_orders', 'customers')`;
+    } else if (role === "purchase") {
+      logsFilter = sql`WHERE al.entity_type IN ('purchase_orders', 'vendors')`;
+    } else if (role === "manufacturing") {
+      logsFilter = sql`WHERE al.entity_type IN ('manufacturing_orders', 'boms')`;
+    } else if (role === "inventory") {
+      logsFilter = sql`WHERE al.entity_type IN ('stock_ledger', 'inventory')`;
+    }
+
+    const logsPromise = sql`
+      SELECT 
+        al.id, 
+        al.entity_type, 
+        al.action, 
+        al.created_at, 
+        u.name AS user_name,
+        CASE 
+          WHEN al.entity_type = 'sales_orders' THEN (SELECT order_number FROM sales_orders WHERE id = al.entity_id)
+          WHEN al.entity_type = 'purchase_orders' THEN (SELECT po_number FROM purchase_orders WHERE id = al.entity_id)
+          WHEN al.entity_type = 'manufacturing_orders' THEN (SELECT mo_number FROM manufacturing_orders WHERE id = al.entity_id)
+          ELSE NULL
+        END AS reference_number
+      FROM audit_logs al
+      LEFT JOIN users u ON u.id = al.user_id
+      ${logsFilter}
+      ORDER BY al.created_at DESC, al.id DESC
+      LIMIT 10
+    ` as unknown as Array<{ id: number; entity_type: string; action: string; created_at: Date; user_name: string | null; reference_number: string | null }>;
+
+    const [draftSales, draftPurchases, readyMOs, lowStockProducts, recentLogs] = await Promise.all([
+      salesPromise,
+      purchasePromise,
+      manufacturingPromise,
+      lowStockPromise,
+      logsPromise
+    ]);
+
+    const approvals: NavbarApproval[] = [];
+
+    // Format Draft Sales Orders
+    for (const so of draftSales) {
+      approvals.push({
+        id: so.id,
+        title: `${so.order_number} Approval Required`,
+        desc: `Confirm sales order for ${so.customer_name || "Unknown customer"} - Total value ${formatMoney(Number(so.total_amount))} (${so.item_count} items)`,
+        time: so.created_at.toISOString(),
+        action: "Confirm",
+        type: "sales"
+      });
+    }
+
+    // Format Draft Purchase Orders
+    for (const po of draftPurchases) {
+      approvals.push({
+        id: po.id,
+        title: `${po.po_number} Approval Required`,
+        desc: `Approve purchase order for ${po.vendor_name || "Unknown vendor"} - Total value ${formatMoney(Number(po.total_amount))} (${po.item_count} items)`,
+        time: po.created_at.toISOString(),
+        action: "Approve",
+        type: "purchase"
+      });
+    }
+
+    // Format Ready MOs
+    for (const mo of readyMOs) {
+      approvals.push({
+        id: mo.id,
+        title: `${mo.mo_number} Material Release`,
+        desc: `Release component stock and start manufacturing of ${mo.quantity}x ${mo.product_name}`,
+        time: mo.created_at.toISOString(),
+        action: "Release",
+        type: "manufacturing"
+      });
+    }
+
+    const notifications: NavbarNotification[] = [];
+
+    // Format Low Stock Alerts
+    for (const prod of lowStockProducts) {
+      const avail = prod.on_hand_qty - prod.reserved_qty;
+      notifications.push({
+        id: `low-stock-${prod.id}`,
+        title: "Low Stock Alert",
+        desc: `Product ${prod.name} (${prod.sku}) is below safety limit: only ${avail} available`,
+        time: new Date().toISOString(), // Current state alert
+        type: "warning"
+      });
+    }
+
+    // Format Recent Logs
+    for (const log of recentLogs) {
+      let title = `${log.entity_type} Action`;
+      let desc = `${log.action} on ${log.entity_type} by ${log.user_name || "System"}`;
+      let type: "info" | "success" | "warning" = "info";
+
+      const ref = log.reference_number || `#${log.id}`;
+
+      if (log.entity_type === "sales_orders") {
+        if (log.action === "CONFIRM") {
+          title = "Order Confirmed";
+          desc = `Sales Order ${ref} confirmed by Sales Team`;
+          type = "info";
+        } else if (log.action === "DELIVER") {
+          title = "Order Delivered";
+          desc = `Sales Order ${ref} successfully delivered`;
+          type = "success";
+        } else if (log.action === "CANCEL") {
+          title = "Order Cancelled";
+          desc = `Sales Order ${ref} was cancelled`;
+          type = "warning";
+        }
+      } else if (log.entity_type === "purchase_orders") {
+        if (log.action === "CONFIRM") {
+          title = "Purchase PO Confirmed";
+          desc = `Purchase Order ${ref} sent to vendor`;
+          type = "info";
+        } else if (log.action === "RECEIVE") {
+          title = "Material Received";
+          desc = `Purchase Order ${ref} items received in warehouse`;
+          type = "success";
+        } else if (log.action === "CANCEL") {
+          title = "Purchase PO Cancelled";
+          desc = `Purchase Order ${ref} cancelled`;
+          type = "warning";
+        }
+      } else if (log.entity_type === "manufacturing_orders") {
+        if (log.action === "START") {
+          title = "Production Started";
+          desc = `Manufacturing Order ${ref} started production`;
+          type = "info";
+        } else if (log.action === "COMPLETE") {
+          title = "Production Completed";
+          desc = `Manufacturing Order ${ref} finished and stored`;
+          type = "success";
+        } else if (log.action === "CANCEL") {
+          title = "Production Cancelled";
+          desc = `Manufacturing Order ${ref} was cancelled`;
+          type = "warning";
+        }
+      }
+
+      notifications.push({
+        id: `audit-${log.id}`,
+        title,
+        desc,
+        time: log.created_at.toISOString(),
+        type
+      });
+    }
+
+    return { approvals, notifications };
+  } catch (error) {
+    console.error("Error fetching navbar dropdown data:", error);
+    return { approvals: [], notifications: [] };
+  }
 }

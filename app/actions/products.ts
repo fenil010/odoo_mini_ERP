@@ -15,6 +15,10 @@ const productSchema = z.object({
   procure_on_demand: z.preprocess((val) => val === "true" || val === true, z.boolean()),
   image_url: z.string().url("Must be a valid URL.").or(z.string().length(0)).nullable(),
   product_type: z.enum(["FINISHED_GOOD", "RAW_MATERIAL"]),
+  shipping_charge: z.coerce.number().min(0, "Shipping charge must be non-negative.").default(0),
+  packing_charge: z.coerce.number().min(0, "Packing charge must be non-negative.").default(0),
+  manufacturing_charge: z.coerce.number().min(0, "Manufacturing charge must be non-negative.").default(0),
+  other_charge: z.coerce.number().min(0, "Other charge must be non-negative.").default(0),
 });
 
 export type ActionState = {
@@ -37,6 +41,10 @@ export async function createProductAction(prevState: ActionState | null, formDat
   const procure_on_demand = formData.get("procure_on_demand") ? "true" : "false";
   const image_url = formData.get("image_url") as string || null;
   const product_type = formData.get("product_type") as string;
+  const shipping_charge = formData.get("shipping_charge") as string || "0";
+  const packing_charge = formData.get("packing_charge") as string || "0";
+  const manufacturing_charge = formData.get("manufacturing_charge") as string || "0";
+  const other_charge = formData.get("other_charge") as string || "0";
 
   const result = productSchema.safeParse({
     name,
@@ -47,6 +55,10 @@ export async function createProductAction(prevState: ActionState | null, formDat
     procure_on_demand,
     image_url,
     product_type,
+    shipping_charge,
+    packing_charge,
+    manufacturing_charge,
+    other_charge,
   });
 
   if (!result.success) {
@@ -66,8 +78,8 @@ export async function createProductAction(prevState: ActionState | null, formDat
 
     await sql.begin(async (tx) => {
       const productResult = await tx<{ id: number }[]>`
-        INSERT INTO products (name, sku, sale_price, cost_price, procurement_type, procure_on_demand, image_url, product_type)
-        VALUES (${p.name}, ${p.sku}, ${p.sale_price}, ${p.cost_price}, ${p.procurement_type}, ${p.procure_on_demand}, ${p.image_url}, ${p.product_type})
+        INSERT INTO products (name, sku, sale_price, cost_price, procurement_type, procure_on_demand, image_url, product_type, shipping_charge, packing_charge, manufacturing_charge, other_charge)
+        VALUES (${p.name}, ${p.sku}, ${p.sale_price}, ${p.cost_price}, ${p.procurement_type}, ${p.procure_on_demand}, ${p.image_url}, ${p.product_type}, ${p.shipping_charge}, ${p.packing_charge}, ${p.manufacturing_charge}, ${p.other_charge})
         RETURNING id
       `;
 
@@ -109,6 +121,10 @@ export async function updateProductAction(productId: number, prevState: ActionSt
   const procure_on_demand = formData.get("procure_on_demand") ? "true" : "false";
   const image_url = formData.get("image_url") as string || null;
   const product_type = formData.get("product_type") as string;
+  const shipping_charge = formData.get("shipping_charge") as string || "0";
+  const packing_charge = formData.get("packing_charge") as string || "0";
+  const manufacturing_charge = formData.get("manufacturing_charge") as string || "0";
+  const other_charge = formData.get("other_charge") as string || "0";
 
   const result = productSchema.safeParse({
     name,
@@ -119,6 +135,10 @@ export async function updateProductAction(productId: number, prevState: ActionSt
     procure_on_demand,
     image_url,
     product_type,
+    shipping_charge,
+    packing_charge,
+    manufacturing_charge,
+    other_charge,
   });
 
   if (!result.success) {
@@ -154,7 +174,11 @@ export async function updateProductAction(productId: number, prevState: ActionSt
             procurement_type = ${p.procurement_type},
             procure_on_demand = ${p.procure_on_demand},
             image_url = ${p.image_url},
-            product_type = ${p.product_type}
+            product_type = ${p.product_type},
+            shipping_charge = ${p.shipping_charge},
+            packing_charge = ${p.packing_charge},
+            manufacturing_charge = ${p.manufacturing_charge},
+            other_charge = ${p.other_charge}
         WHERE id = ${productId}
       `;
 

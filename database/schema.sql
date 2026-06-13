@@ -51,6 +51,12 @@ CREATE TABLE products (
     -- Product classification: FINISHED_GOOD or RAW_MATERIAL for BoM and procurement logic
     product_type VARCHAR(30),
     
+    -- Additional charges for cost calculation and net profit analysis
+    shipping_charge DECIMAL(12,2) DEFAULT 0.00,
+    packing_charge DECIMAL(12,2) DEFAULT 0.00,
+    manufacturing_charge DECIMAL(12,2) DEFAULT 0.00,
+    other_charge DECIMAL(12,2) DEFAULT 0.00,
+    
     -- Timestamp of record creation for audit trail
     created_at TIMESTAMP DEFAULT NOW()
 );
@@ -153,5 +159,17 @@ CREATE TABLE audit_logs (
     action VARCHAR(100),
     old_value JSONB,
     new_value JSONB,
-    created_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMP DEFAULT NOW(),
+    
+    -- Extended Intelligence Columns
+    event_category VARCHAR(50) DEFAULT 'SYSTEM',
+    severity VARCHAR(20) DEFAULT 'INFO',
+    entity_name VARCHAR(255),
+    action_summary TEXT,
+    metadata JSONB,
+    impact_type VARCHAR(50),
+    impact_value DECIMAL(12,2) DEFAULT 0.00,
+    is_system_event BOOLEAN DEFAULT FALSE,
+    related_entity_type VARCHAR(100),
+    related_entity_id INT
 );

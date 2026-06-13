@@ -4,6 +4,7 @@ import { sql } from "@/lib/db";
 import { createSession } from "@/lib/auth/session";
 import { DB_ROLE_TO_KEY, ROLE_DASHBOARD } from "@/lib/auth/auth";
 import type { RoleKey } from "@/app/dashboard/role-data";
+import { logAudit } from "@/lib/audit";
 
 /**
  * Verify a password against the custom SHA-256 format used by seed.ts:
@@ -70,6 +71,23 @@ export async function POST(request: NextRequest) {
 
     // Use same error for user-not-found vs wrong password (prevents user enumeration)
     if (!user) {
+      // Log failed login (user not found)
+      await logAudit(sql, {
+        userId: null,
+        entityType: "users",
+        entityId: 0,
+        action: "FAILED_LOGIN",
+        eventCategory: "AUTHENTICATION",
+        severity: "WARNING",
+        actionSummary: `Failed login attempt for email: ${email}`,
+        metadata: {
+          email,
+          ip: request.headers.get("x-forwarded-for") ?? "127.0.0.1",
+          userAgent: request.headers.get("user-agent") ?? "Unknown",
+          reason: "User not found"
+        }
+      });
+
       return NextResponse.json(
         { error: "Invalid email or password." },
         { status: 401 }
@@ -79,6 +97,23 @@ export async function POST(request: NextRequest) {
     const passwordMatch = await verifyPassword(password, user.password_hash);
 
     if (!passwordMatch) {
+      // Log failed login (invalid password)
+      await logAudit(sql, {
+        userId: user.id,
+        entityType: "users",
+        entityId: user.id,
+        action: "FAILED_LOGIN",
+        eventCategory: "AUTHENTICATION",
+        severity: "WARNING",
+        actionSummary: `Failed login attempt for user: ${email}`,
+        metadata: {
+          email,
+          ip: request.headers.get("x-forwarded-for") ?? "127.0.0.1",
+          userAgent: request.headers.get("user-agent") ?? "Unknown",
+          reason: "Invalid password"
+        }
+      });
+
       return NextResponse.json(
         { error: "Invalid email or password." },
         { status: 401 }
@@ -89,6 +124,23 @@ export async function POST(request: NextRequest) {
     const roleKey = DB_ROLE_TO_KEY[user.role.toUpperCase()] as RoleKey | undefined;
 
     if (!roleKey) {
+      // Log failed login (invalid role config)
+      await logAudit(sql, {
+        userId: user.id,
+        entityType: "users",
+        entityId: user.id,
+        action: "FAILED_LOGIN",
+        eventCategory: "AUTHENTICATION",
+        severity: "ERROR",
+        actionSummary: `Failed login attempt for user ${email} due to unconfigured role ${user.role}`,
+        metadata: {
+          email,
+          ip: request.headers.get("x-forwarded-for") ?? "127.0.0.1",
+          userAgent: request.headers.get("user-agent") ?? "Unknown",
+          reason: "Unconfigured role"
+        }
+      });
+
       return NextResponse.json(
         { error: "Unknown role. Please contact an administrator." },
         { status: 403 }
@@ -97,6 +149,22 @@ export async function POST(request: NextRequest) {
 
     // Issue the HttpOnly JWT session cookie
     await createSession(user.id, user.role, roleKey);
+
+    // Log successful login
+    await logAudit(sql, {
+      userId: user.id,
+      entityType: "users",
+      entityId: user.id,
+      action: "LOGIN",
+      eventCategory: "AUTHENTICATION",
+      severity: "SUCCESS",
+      actionSummary: `User logged in successfully as ${user.role}`,
+      metadata: {
+        email,
+        ip: request.headers.get("x-forwarded-for") ?? "127.0.0.1",
+        userAgent: request.headers.get("user-agent") ?? "Unknown"
+      }
+    });
 
     // Tell the client where to redirect
     return NextResponse.json(

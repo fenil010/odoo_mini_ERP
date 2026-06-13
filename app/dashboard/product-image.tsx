@@ -1,19 +1,31 @@
 "use client";
 
 import { useState } from "react";
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 type ProductImageProps = {
   alt: string;
   src?: string | null;
+  className?: string;
 };
 
-export function ProductImage({ alt, src }: ProductImageProps) {
+export function ProductImage({ alt, src, className }: ProductImageProps) {
   const [hasError, setHasError] = useState(false);
   const supportedSrc = getSupportedImageUrl(src);
 
   if (!supportedSrc || hasError) {
     return (
-      <div className="flex h-16 w-16 items-center justify-center rounded border border-[#e3d8c5] bg-[#f0ebe0] px-1 text-center text-xs text-[#68756e]">
+      <div 
+        className={cn(
+          "flex items-center justify-center bg-[#f0ebe0] text-center text-[10px] font-bold text-[#68756e]",
+          className || "h-full w-full"
+        )}
+      >
         No image
       </div>
     );
@@ -23,9 +35,7 @@ export function ProductImage({ alt, src }: ProductImageProps) {
     <img
       src={supportedSrc}
       alt={alt}
-      width={64}
-      height={64}
-      className="h-16 w-16 rounded border border-[#e3d8c5] object-cover"
+      className={cn("h-full w-full object-cover", className)}
       onError={() => setHasError(true)}
     />
   );

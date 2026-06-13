@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import { Plus, Search, Edit2, Trash2, Loader2 } from "lucide-react";
 import { createCustomerAction, updateCustomerAction, deleteCustomerAction } from "@/app/actions/customers";
 import Modal from "@/app/components/ui/Modal";
@@ -20,7 +21,8 @@ type CustomersClientProps = {
 
 export default function CustomersClient({ initialCustomers }: CustomersClientProps) {
   const [customers, setCustomers] = useState<Customer[]>(initialCustomers);
-  const [searchTerm, setSearchTerm] = useState("");
+  const searchParams = useSearchParams();
+  const [searchTerm, setSearchTerm] = useState(searchParams ? (searchParams.get("search") || "") : "");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
