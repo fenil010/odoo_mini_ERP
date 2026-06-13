@@ -24,8 +24,9 @@ import { ProductImage } from "./product-image";
 import Link from "next/link";
 import { connection } from "next/server";
 import { getRoleBusinessData } from "@/lib/dashboard-data";
+import { getRoleDashboardFromDB, getRolePageFromDB } from "@/lib/role-queries";
 import { cn } from "@/lib/utils";
-import { getRolePage, roleDashboards, type RoleKey, type SidebarIcon } from "./role-data";
+import { type RoleKey, type SidebarIcon } from "./role-data";
 
 type RoleWorkspaceProps = {
   role: RoleKey;
@@ -56,15 +57,20 @@ const iconMap: Record<SidebarIcon, LucideIcon> = {
 export async function RoleWorkspace({ role, section }: RoleWorkspaceProps) {
   await connection();
 
-  const dashboard = roleDashboards[role];
-  const currentPage = getRolePage(role, section) ?? getRolePage(role);
+  const dashboard = await getRoleDashboardFromDB(role);
+
+  if (!dashboard) {
+    return null;
+  }
+
+  const currentPage = (await getRolePageFromDB(role, section)) ?? (await getRolePageFromDB(role));
   const businessData = await getRoleBusinessData(role, section);
   const SummaryIcon = iconMap[dashboard.sidebarSections[0].items[0].icon];
   const isOverview = !section;
 
   return (
     <main className="min-h-screen bg-[#f7f4ed] text-[#1d2520]">
-      <div className="mx-auto grid min-h-screen w-full max-w-[1500px] lg:grid-cols-[292px_1fr]">
+      <div className="mx-auto grid min-h-screen w-full max-w-375 lg:grid-cols-[292px_1fr]">
         <aside className="scrollbar-hidden flex flex-col border-b border-[#ded4c3] bg-[#f7f4ed] px-4 py-5 text-[#1d2520] sm:px-6 lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto lg:border-b-0 lg:border-r">
           <div>
             <Link href="/" className="flex items-center gap-3" aria-label="Mini ERP home">

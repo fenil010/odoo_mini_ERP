@@ -1,7 +1,9 @@
 import Link from "next/link";
-import { roleDashboards, roleOrder } from "./role-data";
+import { getAllRolesFromDB } from "@/lib/role-queries";
 
-export default function DashboardIndexPage() {
+export default async function DashboardIndexPage() {
+  const roles = await getAllRolesFromDB();
+
   return (
     <main className="min-h-screen bg-[#f7f4ed] px-4 py-8 text-[#1d2520] sm:px-8">
       <div className="mx-auto w-full max-w-7xl">
@@ -26,9 +28,7 @@ export default function DashboardIndexPage() {
             Select a workspace.
           </h1>
           <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {roleOrder.map((roleKey) => {
-              const role = roleDashboards[roleKey];
-
+            {roles.map((role) => {
               return (
                 <Link
                   key={role.key}

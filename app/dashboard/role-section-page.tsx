@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { getRolePage, type RoleKey } from "./role-data";
+import { getRolePageFromDB } from "@/lib/role-queries";
+import { type RoleKey } from "./role-data";
 import { RoleWorkspace } from "./role-workspace";
 
 type RoleSectionPageProps = {
@@ -10,7 +11,7 @@ type RoleSectionPageProps = {
 export async function RoleSectionPage({ role, params }: RoleSectionPageProps) {
   const { section } = await params;
 
-  if (!getRolePage(role, section)) {
+  if (!(await getRolePageFromDB(role, section))) {
     notFound();
   }
 
