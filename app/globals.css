@@ -32,3 +32,101 @@ body {
     display: none;
   }
 }
+
+/* Custom Keyframes and Utilities for Premium Animations */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes float-delayed {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(8px); }
+}
+
+@keyframes draw {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.15); opacity: 0.7; }
+}
+
+@keyframes aurora {
+  0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+  33% { transform: translate(50px, -60px) scale(1.15) rotate(120deg); }
+  66% { transform: translate(-30px, 40px) scale(0.9) rotate(240deg); }
+}
+
+@utility animate-float-slow {
+  animation: float 6s ease-in-out infinite;
+}
+
+@utility animate-float-delayed {
+  animation: float-delayed 7s ease-in-out infinite;
+}
+
+@utility animate-marquee {
+  animation: marquee 40s linear infinite;
+}
+
+@utility animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@utility animate-aurora-1 {
+  animation: aurora 25s ease-in-out infinite;
+}
+
+@utility animate-aurora-2 {
+  animation: aurora 30s ease-in-out infinite alternate;
+}
+
+.delay-100 {
+  animation-delay: 100ms;
+}
+.delay-200 {
+  animation-delay: 200ms;
+}
+.delay-300 {
+  animation-delay: 300ms;
+}
+.delay-500 {
+  animation-delay: 500ms;
+}
+
+/* Scroll reveal styles */
+.reveal-on-scroll {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 1s cubic-bezier(0.16, 1, 0.3, 1), transform 1s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.delay-reveal-100 {
+  transition-delay: 100ms;
+}
+.delay-reveal-200 {
+  transition-delay: 200ms;
+}
+.delay-reveal-300 {
+  transition-delay: 300ms;
+}
+.delay-reveal-400 {
+  transition-delay: 400ms;
+}
+.delay-reveal-500 {
+  transition-delay: 500ms;
+}
+
+
