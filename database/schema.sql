@@ -24,13 +24,34 @@ CREATE TABLE vendors (
 );
 
 CREATE TABLE products (
+    -- Primary identifier for the product record
     id SERIAL PRIMARY KEY,
+    
+    -- Human-readable product name displayed in UI and reports
     name VARCHAR(255) NOT NULL,
+    
+    -- Unique SKU code for inventory tracking and barcode scanning
     sku VARCHAR(100) UNIQUE,
+    
+    -- Selling price to customers; displayed in sales orders and quotations
     sale_price DECIMAL(12,2),
+    
+    -- Cost price from vendors; used for profitability analysis
     cost_price DECIMAL(12,2),
+    
+    -- Procurement strategy: BUY, MANUFACTURE, or MTO (Make-To-Order)
     procurement_type VARCHAR(30),
+    
+    -- Boolean flag: if TRUE, system creates purchase orders on-demand vs stock replenishment
     procure_on_demand BOOLEAN DEFAULT TRUE,
+    
+    -- Cloudinary CDN URL for product image display in catalogs and dashboards
+    image_url TEXT,
+    
+    -- Product classification: FINISHED_GOOD or RAW_MATERIAL for BoM and procurement logic
+    product_type VARCHAR(30),
+    
+    -- Timestamp of record creation for audit trail
     created_at TIMESTAMP DEFAULT NOW()
 );
 

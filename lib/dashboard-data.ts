@@ -18,6 +18,7 @@ export type StockItem = {
   detail: string;
   quantity: string;
   status: string;
+  imageUrl?: string | null;
 };
 
 export type RoleBusinessData = {
@@ -42,6 +43,7 @@ type ProductRow = {
   procurement_type: string | null;
   on_hand_qty: number | null;
   reserved_qty: number | null;
+  image_url: string | null;
 };
 
 type VendorRow = {
@@ -133,6 +135,7 @@ export async function getRoleBusinessData(role: RoleKey): Promise<RoleBusinessDa
       detail: `${product.sku} / ${product.procurement_type ?? "N/A"}`,
       quantity: `${available} available`,
       status: available <= 5 ? "Low stock" : "Healthy",
+      imageUrl: product.image_url,
     };
   });
 
@@ -268,7 +271,7 @@ export async function getRoleBusinessData(role: RoleKey): Promise<RoleBusinessDa
 
 async function getProducts() {
   return (await sql`
-    SELECT p.name, p.sku, p.sale_price, p.cost_price, p.procurement_type, i.on_hand_qty, i.reserved_qty
+    SELECT p.name, p.sku, p.sale_price, p.cost_price, p.procurement_type, i.on_hand_qty, i.reserved_qty, p.image_url
     FROM products p
     LEFT JOIN inventory i ON i.product_id = p.id
     ORDER BY p.procurement_type, p.name

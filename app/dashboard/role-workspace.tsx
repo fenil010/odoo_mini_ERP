@@ -20,17 +20,16 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react";
+import { ProductImage } from "./product-image";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { getRoleBusinessData } from "@/lib/dashboard-data";
 import { cn } from "@/lib/utils";
-import { roleDashboards, roleOrder, type RoleKey, type SidebarIcon } from "../role-data";
+import { getRolePage, roleDashboards, type RoleKey, type SidebarIcon } from "./role-data";
 
-type RolePageProps = {
-  params: Promise<{
-    role: string;
-  }>;
+type RoleWorkspaceProps = {
+  role: RoleKey;
+  section?: string;
 };
 
 const iconMap: Record<SidebarIcon, LucideIcon> = {
@@ -54,22 +53,14 @@ const iconMap: Record<SidebarIcon, LucideIcon> = {
   wrench: Wrench,
 };
 
-export function generateStaticParams() {
-  return roleOrder.map((role) => ({ role }));
-}
-
-export default async function RoleDashboardPage({ params }: RolePageProps) {
-  const { role } = await params;
-
-  if (!isRoleKey(role)) {
-    notFound();
-  }
-
+export async function RoleWorkspace({ role, section }: RoleWorkspaceProps) {
   await connection();
 
   const dashboard = roleDashboards[role];
+  const currentPage = getRolePage(role, section) ?? getRolePage(role);
   const businessData = await getRoleBusinessData(role);
   const SummaryIcon = iconMap[dashboard.sidebarSections[0].items[0].icon];
+  const isOverview = !section;
 
   return (
     <main className="min-h-screen bg-[#f7f4ed] text-[#1d2520]">
@@ -108,9 +99,9 @@ export default async function RoleDashboardPage({ params }: RolePageProps) {
                   {section.title}
                 </p>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-                  {section.items.map((item, index) => {
+                  {section.items.map((item) => {
                     const Icon = iconMap[item.icon];
-                    const active = index === 0;
+                    const active = item.href === currentPage?.href;
 
                     return (
                       <Link
@@ -155,10 +146,10 @@ export default async function RoleDashboardPage({ params }: RolePageProps) {
                     {dashboard.dbRole}
                   </span>
                   <h1 className="mt-4 text-4xl font-semibold leading-tight text-[#18231f]">
-                    {dashboard.title} Dashboard
+                    {isOverview ? `${dashboard.title} Dashboard` : currentPage?.label}
                   </h1>
                   <p className="mt-3 max-w-3xl text-base leading-7 text-[#53645c]">
-                    {dashboard.focus}
+                    {isOverview ? dashboard.focus : currentPage?.description}
                   </p>
                 </div>
               </div>
@@ -181,8 +172,12 @@ export default async function RoleDashboardPage({ params }: RolePageProps) {
               <section className="rounded-lg border border-[#d9cfbd] bg-[#fbfaf6] p-5 shadow-sm">
                 <div className="flex items-center justify-between gap-4 border-b border-[#e5dccb] pb-4">
                   <div>
-                    <h2 className="text-xl font-semibold text-[#202a25]">{businessData.workTitle}</h2>
-                    <p className="mt-1 text-sm text-[#68756e]">{businessData.workDescription}</p>
+                    <h2 className="text-xl font-semibold text-[#202a25]">
+                      {isOverview ? businessData.workTitle : currentPage?.label}
+                    </h2>
+                    <p className="mt-1 text-sm text-[#68756e]">
+                      {isOverview ? businessData.workDescription : currentPage?.description}
+                    </p>
                   </div>
                 </div>
 
@@ -228,7 +223,8 @@ export default async function RoleDashboardPage({ params }: RolePageProps) {
             </div>
 
             <section className="mt-6 overflow-hidden rounded-lg border border-[#d9cfbd] bg-white shadow-sm">
-              <div className="grid grid-cols-[1fr_0.7fr_0.6fr] border-b border-[#e5dccb] bg-[#fbfaf6] px-4 py-3 text-xs font-semibold uppercase text-[#68756e]">
+              <div className="grid grid-cols-[80px_1fr_0.7fr_0.6fr] border-b border-[#e5dccb] bg-[#fbfaf6] px-4 py-3 text-xs font-semibold uppercase text-[#68756e]">
+                <span>Image</span>
                 <span>Product / SKU</span>
                 <span>Available</span>
                 <span>Status</span>
@@ -236,8 +232,9 @@ export default async function RoleDashboardPage({ params }: RolePageProps) {
               {businessData.stockItems.map((item) => (
                 <div
                   key={item.name}
-                  className="grid grid-cols-[1fr_0.7fr_0.6fr] gap-3 border-b border-[#efe7d8] px-4 py-4 text-sm last:border-b-0"
+                  className="grid grid-cols-[80px_1fr_0.7fr_0.6fr] gap-3 border-b border-[#efe7d8] px-4 py-4 text-sm last:border-b-0 items-center"
                 >
+                  <ProductImage src={item.imageUrl} alt={item.name} />
                   <span>
                     <span className="block font-semibold text-[#202a25]">{item.name}</span>
                     <span className="mt-1 block text-xs text-[#68756e]">{item.detail}</span>
@@ -252,8 +249,4 @@ export default async function RoleDashboardPage({ params }: RolePageProps) {
       </div>
     </main>
   );
-}
-
-function isRoleKey(role: string): role is RoleKey {
-  return role in roleDashboards;
 }
