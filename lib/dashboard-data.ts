@@ -44,6 +44,7 @@ type ProductRow = {
   on_hand_qty: number | null;
   reserved_qty: number | null;
   image_url: string | null;
+  product_type: string | null;
 };
 
 type VendorRow = {
@@ -98,7 +99,38 @@ type AuditRow = {
   user_name: string | null;
 };
 
-export async function getRoleBusinessData(role: RoleKey): Promise<RoleBusinessData> {
+type UserRow = {
+  name: string;
+  email: string;
+  role: string;
+  created_at: Date | string | null;
+};
+
+type CustomerRow = {
+  name: string;
+  email: string | null;
+  phone: string | null;
+  order_count: number;
+};
+
+type OrderItemRow = {
+  reference: string | null;
+  product_name: string | null;
+  quantity: number | null;
+  unit_price: string | null;
+  status: string | null;
+};
+
+type BomRow = {
+  product_name: string | null;
+  component_name: string | null;
+  quantity: string | null;
+};
+
+export async function getRoleBusinessData(
+  role: RoleKey,
+  section?: string,
+): Promise<RoleBusinessData> {
   const [
     products,
     vendors,
@@ -110,6 +142,11 @@ export async function getRoleBusinessData(role: RoleKey): Promise<RoleBusinessDa
     auditLogs,
     usersCount,
     customersCount,
+    users,
+    customers,
+    salesOrderItems,
+    purchaseOrderItems,
+    bomItems,
   ] = await Promise.all([
     getProducts(),
     getVendors(),
@@ -121,6 +158,11 @@ export async function getRoleBusinessData(role: RoleKey): Promise<RoleBusinessDa
     getAuditLogs(),
     getCount("users"),
     getCount("customers"),
+    getUsers(),
+    getCustomers(),
+    getSalesOrderItems(),
+    getPurchaseOrderItems(),
+    getBomItems(),
   ]);
 
   const lowStock = products.filter((product) => availableQty(product) <= 5).length;
@@ -138,6 +180,25 @@ export async function getRoleBusinessData(role: RoleKey): Promise<RoleBusinessDa
       imageUrl: product.image_url,
     };
   });
+
+  if (section) {
+    return getSectionBusinessData(role, section, {
+      products,
+      vendors,
+      salesOrders,
+      purchaseOrders,
+      manufacturingOrders,
+      workOrders,
+      stockLedger,
+      auditLogs,
+      users,
+      customers,
+      salesOrderItems,
+      purchaseOrderItems,
+      bomItems,
+      stockItems,
+    });
+  }
 
   if (role === "admin") {
     return {
@@ -269,9 +330,563 @@ export async function getRoleBusinessData(role: RoleKey): Promise<RoleBusinessDa
   };
 }
 
+type SectionDataContext = {
+  products: ProductRow[];
+  vendors: VendorRow[];
+  salesOrders: SalesOrderRow[];
+  purchaseOrders: PurchaseOrderRow[];
+  manufacturingOrders: ManufacturingOrderRow[];
+  workOrders: WorkOrderRow[];
+  stockLedger: LedgerRow[];
+  auditLogs: AuditRow[];
+  users: UserRow[];
+  customers: CustomerRow[];
+  salesOrderItems: OrderItemRow[];
+  purchaseOrderItems: OrderItemRow[];
+  bomItems: BomRow[];
+  stockItems: StockItem[];
+};
+
+function getSectionBusinessData(
+  role: RoleKey,
+  section: string,
+  data: SectionDataContext,
+): RoleBusinessData {
+  const lowStockProducts = data.products.filter((product) => availableQty(product) <= 5);
+  const reservedProducts = data.products.filter((product) => Number(product.reserved_qty ?? 0) > 0);
+  const readyManufacturing = data.manufacturingOrders.filter((order) => order.status === "READY");
+  const pendingManufacturing = data.manufacturingOrders.filter((order) => order.status !== "DONE");
+  const openSales = data.salesOrders.filter((order) => order.status !== "DONE");
+  const openPurchases = data.purchaseOrders.filter((order) => order.status !== "RECEIVED");
+  const key = `${role}/${section}`;
+
+  switch (key) {
+    case "admin/users-roles":
+      return sectionData(
+        "System users",
+        "Accounts currently configured in the ERP.",
+        data.users.map((user) => ({
+          title: user.name,
+          description: `${user.email} / Added ${formatDate(user.created_at)}`,
+          status: user.role,
+        })),
+        "Role coverage",
+        roleSummaryItems(data.users),
+        [
+          metric("Users", data.users.length, "Active ERP accounts"),
+          metric("Roles", new Set(data.users.map((user) => user.role)).size, "Assigned access groups"),
+          metric("Admins", data.users.filter((user) => user.role === "ADMIN").length, "Full-access users"),
+        ],
+        [],
+      );
+    case "admin/permissions":
+      return sectionData(
+        "Role permissions",
+        "Responsibility and access scope for every ERP role.",
+        [
+          accessItem("ADMIN", "Full access to configuration, users, and all modules"),
+          accessItem("SALES", "Customers, sales orders, shortages, and deliveries"),
+          accessItem("PURCHASE", "Vendors, purchase orders, shortages, and receipts"),
+          accessItem("MANUFACTURING", "Manufacturing orders, work orders, and BoMs"),
+          accessItem("INVENTORY", "Stock, ledger movements, receipts, and deliveries"),
+          accessItem("OWNER", "Executive reporting across all business modules"),
+        ],
+        "Assigned users",
+        roleSummaryItems(data.users),
+        [
+          metric("Permission groups", 6, "Business roles"),
+          metric("Assigned users", data.users.length, "Users with role access"),
+          metric("Unassigned", data.users.filter((user) => !user.role).length, "Users requiring review"),
+        ],
+        [],
+      );
+    case "admin/system-settings":
+      return sectionData(
+        "Application settings",
+        "Current organization-level ERP configuration.",
+        [
+          settingItem("Currency", "Indian Rupee (INR)", "Configured"),
+          settingItem("Inventory policy", "On hand minus reserved stock", "Active"),
+          settingItem("Procurement", "Buy, manufacture, and make-to-order", "Active"),
+          settingItem("Audit trail", "Administrative changes are recorded", "Enabled"),
+        ],
+        "Environment",
+        [
+          settingItem("Database", "PostgreSQL", "Connected"),
+          settingItem("Application", "Next.js ERP workspace", "Running"),
+        ],
+        [
+          metric("Modules", 7, "Enabled business modules"),
+          metric("Products", data.products.length, "Configured master records"),
+          metric("Users", data.users.length, "Configured accounts"),
+        ],
+        [],
+      );
+    case "admin/audit-logs":
+      return sectionData(
+        "Audit history",
+        "Latest tracked changes and responsible users.",
+        data.auditLogs.map((log) => ({
+          title: `${log.entity_type ?? "Entity"} / ${log.action ?? "Action"}`,
+          description: log.user_name ? `Performed by ${log.user_name}` : "System-generated event",
+          status: "Logged",
+        })),
+        "Audit coverage",
+        entitySummaryItems(data.auditLogs),
+        [
+          metric("Events", data.auditLogs.length, "Recent audit records"),
+          metric("Users involved", new Set(data.auditLogs.map((log) => log.user_name).filter(Boolean)).size, "Recorded actors"),
+          metric("Entity types", new Set(data.auditLogs.map((log) => log.entity_type).filter(Boolean)).size, "Tracked record groups"),
+        ],
+        [],
+      );
+    case "admin/master-data":
+      return sectionData(
+        "Product master",
+        "Products, pricing, and procurement rules used across the ERP.",
+        data.products.map(productItem),
+        "Business partners",
+        [...data.customers.map(customerItem), ...data.vendors.map(vendorItem)],
+        [
+          metric("Products", data.products.length, "Product master records"),
+          metric("Customers", data.customers.length, "Customer accounts"),
+          metric("Vendors", data.vendors.length, "Supplier accounts"),
+        ],
+        data.stockItems,
+      );
+    case "admin/all-modules":
+      return sectionData(
+        "Enabled ERP modules",
+        "Operational areas available to the business.",
+        [
+          moduleItem("Sales", data.salesOrders.length, "Customer demand and order fulfillment"),
+          moduleItem("Purchase", data.purchaseOrders.length, "Vendor procurement and incoming stock"),
+          moduleItem("Manufacturing", data.manufacturingOrders.length, "Production and shop-floor operations"),
+          moduleItem("Inventory", data.stockLedger.length, "Stock position and movement history"),
+          moduleItem("Master data", data.products.length, "Products and business partners"),
+          moduleItem("Administration", data.users.length, "Users, roles, settings, and audit"),
+        ],
+        "Recent activity",
+        data.auditLogs.map(auditItem),
+        [
+          metric("Modules", 6, "Enabled work areas"),
+          metric("Operational records", data.salesOrders.length + data.purchaseOrders.length + data.manufacturingOrders.length, "Orders across workflows"),
+          metric("Stock movements", data.stockLedger.length, "Ledger activity"),
+        ],
+        [],
+      );
+    case "sales/customers":
+      return sectionData(
+        "Customer accounts",
+        "Contacts and sales-order activity by customer.",
+        data.customers.map(customerItem),
+        "Recent sales orders",
+        data.salesOrders.map(salesOrderItem),
+        [
+          metric("Customers", data.customers.length, "Customer master records"),
+          metric("With orders", data.customers.filter((customer) => customer.order_count > 0).length, "Customers with sales activity"),
+          metric("Orders", data.salesOrders.length, "Sales orders recorded"),
+        ],
+        [],
+      );
+    case "sales/sales-orders":
+      return sectionData(
+        "Sales orders",
+        "Customer demand, value, and current order status.",
+        data.salesOrders.map(salesOrderItem),
+        "Customers",
+        data.customers.map(customerItem),
+        [
+          metric("Orders", data.salesOrders.length, "Total sales orders"),
+          metric("Open orders", openSales.length, "Orders still in progress"),
+          metric("Order value", formatMoney(sumOrderValue(data.salesOrders)), "Total recorded value"),
+        ],
+        [],
+      );
+    case "sales/order-items":
+      return sectionData(
+        "Sales order items",
+        "Products, quantities, and prices requested by customers.",
+        data.salesOrderItems.map(orderLineItem),
+        "Product availability",
+        data.products.map(productItem),
+        [
+          metric("Order lines", data.salesOrderItems.length, "Products requested"),
+          metric("Units ordered", sumQuantity(data.salesOrderItems), "Total item quantity"),
+          metric("Line value", formatMoney(sumLineValue(data.salesOrderItems)), "Extended sales value"),
+        ],
+        [],
+      );
+    case "sales/shortages":
+      return sectionData(
+        "Sales shortages",
+        "Products with five or fewer units available for new demand.",
+        lowStockProducts.map(stockProductItem),
+        "Affected orders",
+        openSales.map(salesOrderItem),
+        [
+          metric("Low-stock products", lowStockProducts.length, "Require fulfillment attention"),
+          metric("Open orders", openSales.length, "Potentially affected demand"),
+          metric("Units available", lowStockProducts.reduce((sum, product) => sum + availableQty(product), 0), "Across shortage products"),
+        ],
+        lowStockProducts.map(stockItem),
+      );
+    case "sales/delivery-status":
+      return sectionData(
+        "Delivery status",
+        "Order progress from confirmation through customer fulfillment.",
+        data.salesOrders.map(salesOrderItem),
+        "Reserved stock",
+        reservedProducts.map(stockProductItem),
+        [
+          metric("Orders to deliver", openSales.length, "Not yet completed"),
+          metric("Reserved products", reservedProducts.length, "Stock committed to demand"),
+          metric("Completed", data.salesOrders.filter((order) => order.status === "DONE").length, "Delivered orders"),
+        ],
+        [],
+      );
+    case "purchase/vendors":
+      return sectionData(
+        "Approved vendors",
+        "Supplier contacts and linked product coverage.",
+        data.vendors.map(vendorItem),
+        "Recent purchase orders",
+        data.purchaseOrders.map(purchaseOrderItem),
+        [
+          metric("Vendors", data.vendors.length, "Approved suppliers"),
+          metric("Linked products", data.vendors.reduce((sum, vendor) => sum + vendor.product_count, 0), "Vendor-product links"),
+          metric("Purchase orders", data.purchaseOrders.length, "Supplier orders"),
+        ],
+        [],
+      );
+    case "purchase/purchase-orders":
+      return sectionData(
+        "Purchase orders",
+        "Supplier orders, values, and procurement status.",
+        data.purchaseOrders.map(purchaseOrderItem),
+        "Vendor coverage",
+        data.vendors.map(vendorItem),
+        [
+          metric("Orders", data.purchaseOrders.length, "Total purchase orders"),
+          metric("Open orders", openPurchases.length, "Awaiting completion"),
+          metric("Order value", formatMoney(sumOrderValue(data.purchaseOrders)), "Total procurement value"),
+        ],
+        [],
+      );
+    case "purchase/purchase-items":
+      return sectionData(
+        "Purchase order items",
+        "Materials, quantities, and costs ordered from suppliers.",
+        data.purchaseOrderItems.map(orderLineItem),
+        "Raw materials",
+        data.products.filter(isRawMaterial).map(productItem),
+        [
+          metric("Order lines", data.purchaseOrderItems.length, "Materials ordered"),
+          metric("Units ordered", sumQuantity(data.purchaseOrderItems), "Incoming quantity"),
+          metric("Line cost", formatMoney(sumLineValue(data.purchaseOrderItems)), "Extended purchase cost"),
+        ],
+        [],
+      );
+    case "purchase/incoming-stock":
+      return sectionData(
+        "Incoming stock",
+        "Open supplier orders expected to replenish inventory.",
+        openPurchases.map(purchaseOrderItem),
+        "Materials on order",
+        data.purchaseOrderItems.map(orderLineItem),
+        [
+          metric("Open purchase orders", openPurchases.length, "Awaiting receipt"),
+          metric("Incoming units", sumQuantity(data.purchaseOrderItems), "Ordered material quantity"),
+          metric("Suppliers", new Set(data.purchaseOrders.map((order) => order.vendor_name).filter(Boolean)).size, "Vendors supplying orders"),
+        ],
+        [],
+      );
+    case "purchase/shortage-demand":
+      return sectionData(
+        "Shortage demand",
+        "Low-stock products requiring procurement attention.",
+        lowStockProducts.map(stockProductItem),
+        "Open purchase orders",
+        openPurchases.map(purchaseOrderItem),
+        [
+          metric("Shortage products", lowStockProducts.length, "At or below threshold"),
+          metric("Open purchase orders", openPurchases.length, "Replenishment in progress"),
+          metric("Raw materials at risk", lowStockProducts.filter(isRawMaterial).length, "Production components"),
+        ],
+        lowStockProducts.map(stockItem),
+      );
+    case "manufacturing/manufacturing-orders":
+      return sectionData(
+        "Manufacturing orders",
+        "Production demand, quantities, and current execution status.",
+        data.manufacturingOrders.map(manufacturingOrderItem),
+        "Related work orders",
+        data.workOrders.map(workOrderItem),
+        [
+          metric("Manufacturing orders", data.manufacturingOrders.length, "Production records"),
+          metric("Ready", readyManufacturing.length, "Available to start"),
+          metric("In progress", pendingManufacturing.length, "Not yet completed"),
+        ],
+        [],
+      );
+    case "manufacturing/work-orders":
+      return sectionData(
+        "Work orders",
+        "Shop-floor operations, planned duration, and execution status.",
+        data.workOrders.map(workOrderItem),
+        "Manufacturing orders",
+        data.manufacturingOrders.map(manufacturingOrderItem),
+        [
+          metric("Work orders", data.workOrders.length, "Production operations"),
+          metric("Planned minutes", data.workOrders.reduce((sum, order) => sum + Number(order.duration_minutes ?? 0), 0), "Total operation duration"),
+          metric("Waiting", data.workOrders.filter((order) => order.status !== "DONE").length, "Operations remaining"),
+        ],
+        [],
+      );
+    case "manufacturing/bom-planning":
+      return sectionData(
+        "Bill of materials",
+        "Components and quantities required to manufacture products.",
+        data.bomItems.map((item) => ({
+          title: item.product_name ?? "Manufactured product",
+          description: `${item.component_name ?? "Component"} / Qty ${item.quantity ?? 0}`,
+          status: "BoM item",
+        })),
+        "Manufactured products",
+        data.products.filter((product) => product.procurement_type === "MANUFACTURE").map(productItem),
+        [
+          metric("BoM lines", data.bomItems.length, "Component requirements"),
+          metric("Manufactured products", new Set(data.bomItems.map((item) => item.product_name).filter(Boolean)).size, "Products with BoMs"),
+          metric("Components", new Set(data.bomItems.map((item) => item.component_name).filter(Boolean)).size, "Unique materials"),
+        ],
+        [],
+      );
+    case "manufacturing/material-readiness":
+      return sectionData(
+        "Material readiness",
+        "Component stock available for planned production.",
+        data.products.filter(isRawMaterial).map(stockProductItem),
+        "Ready manufacturing orders",
+        readyManufacturing.map(manufacturingOrderItem),
+        [
+          metric("Raw materials", data.products.filter(isRawMaterial).length, "Tracked components"),
+          metric("Material shortages", lowStockProducts.filter(isRawMaterial).length, "Components at risk"),
+          metric("Ready orders", readyManufacturing.length, "Can begin production"),
+        ],
+        data.products.filter(isRawMaterial).map(stockItem),
+      );
+    case "manufacturing/completion-queue":
+      return sectionData(
+        "Completion queue",
+        "Production and work orders still awaiting completion.",
+        pendingManufacturing.map(manufacturingOrderItem),
+        "Open operations",
+        data.workOrders.filter((order) => order.status !== "DONE").map(workOrderItem),
+        [
+          metric("Orders pending", pendingManufacturing.length, "Manufacturing not complete"),
+          metric("Operations open", data.workOrders.filter((order) => order.status !== "DONE").length, "Work remaining"),
+          metric("Completed orders", data.manufacturingOrders.filter((order) => order.status === "DONE").length, "Finished production"),
+        ],
+        [],
+      );
+    case "inventory/on-hand-stock":
+      return sectionData(
+        "On hand stock",
+        "Physical product quantities currently recorded in inventory.",
+        data.products.map((product) => ({
+          title: product.name,
+          description: `${product.sku} / ${product.procurement_type ?? "N/A"}`,
+          status: `${Number(product.on_hand_qty ?? 0)} on hand`,
+        })),
+        "Low-stock products",
+        lowStockProducts.map(stockProductItem),
+        [
+          metric("Products", data.products.length, "Tracked inventory records"),
+          metric("On hand units", data.products.reduce((sum, product) => sum + Number(product.on_hand_qty ?? 0), 0), "Physical quantity"),
+          metric("Low stock", lowStockProducts.length, "At or below threshold"),
+        ],
+        data.products.map(stockItem),
+      );
+    case "inventory/reserved-stock":
+      return sectionData(
+        "Reserved stock",
+        "Inventory quantities committed to sales or production demand.",
+        reservedProducts.map((product) => ({
+          title: product.name,
+          description: `${product.sku} / ${availableQty(product)} still available`,
+          status: `${Number(product.reserved_qty ?? 0)} reserved`,
+        })),
+        "Open sales demand",
+        openSales.map(salesOrderItem),
+        [
+          metric("Reserved products", reservedProducts.length, "Products with commitments"),
+          metric("Reserved units", reservedProducts.reduce((sum, product) => sum + Number(product.reserved_qty ?? 0), 0), "Total committed stock"),
+          metric("Open sales orders", openSales.length, "Demand awaiting fulfillment"),
+        ],
+        reservedProducts.map(stockItem),
+      );
+    case "inventory/stock-ledger":
+      return sectionData(
+        "Stock ledger",
+        "Receipts, deliveries, production issues, and adjustments.",
+        data.stockLedger.map(ledgerItem),
+        "Movement summary",
+        movementSummaryItems(data.stockLedger),
+        [
+          metric("Movements", data.stockLedger.length, "Recent ledger entries"),
+          metric("Movement types", new Set(data.stockLedger.map((row) => row.movement_type).filter(Boolean)).size, "Kinds of stock activity"),
+          metric("Products moved", new Set(data.stockLedger.map((row) => row.product_name).filter(Boolean)).size, "Products affected"),
+        ],
+        data.stockItems,
+      );
+    case "inventory/receive-materials":
+      return sectionData(
+        "Receive materials",
+        "Purchase receipts and incoming material movements.",
+        data.stockLedger.filter(isReceipt).map(ledgerItem),
+        "Open purchase orders",
+        openPurchases.map(purchaseOrderItem),
+        [
+          metric("Receipt movements", data.stockLedger.filter(isReceipt).length, "Materials received"),
+          metric("Open purchase orders", openPurchases.length, "Expected receipts"),
+          metric("Incoming units", sumQuantity(data.purchaseOrderItems), "Quantity on purchase lines"),
+        ],
+        data.products.filter(isRawMaterial).map(stockItem),
+      );
+    case "inventory/deliver-products":
+      return sectionData(
+        "Deliver products",
+        "Finished-product issues and customer delivery demand.",
+        data.stockLedger.filter(isDelivery).map(ledgerItem),
+        "Sales orders to fulfill",
+        openSales.map(salesOrderItem),
+        [
+          metric("Delivery movements", data.stockLedger.filter(isDelivery).length, "Finished-product issues"),
+          metric("Orders to fulfill", openSales.length, "Open customer orders"),
+          metric("Finished products", data.products.filter((product) => !isRawMaterial(product)).length, "Deliverable product records"),
+        ],
+        data.products.filter((product) => !isRawMaterial(product)).map(stockItem),
+      );
+    case "owner/revenue-view":
+      return sectionData(
+        "Revenue performance",
+        "Sales-order value and current commercial pipeline.",
+        data.salesOrders.map(salesOrderItem),
+        "Customers",
+        data.customers.map(customerItem),
+        [
+          metric("Sales value", formatMoney(sumOrderValue(data.salesOrders)), "Recorded order revenue"),
+          metric("Orders", data.salesOrders.length, "Sales transactions"),
+          metric("Average order", formatMoney(averageOrderValue(data.salesOrders)), "Average sales-order value"),
+        ],
+        [],
+      );
+    case "owner/product-master":
+      return sectionData(
+        "Product portfolio",
+        "Products, prices, procurement strategies, and inventory position.",
+        data.products.map(productItem),
+        "Vendor coverage",
+        data.vendors.map(vendorItem),
+        [
+          metric("Products", data.products.length, "Portfolio records"),
+          metric("Manufactured", data.products.filter((product) => product.procurement_type === "MANUFACTURE").length, "Made internally"),
+          metric("Purchased", data.products.filter((product) => product.procurement_type === "BUY").length, "Bought from vendors"),
+        ],
+        data.products.map(stockItem),
+      );
+    case "owner/stock-risk":
+      return sectionData(
+        "Stock risk",
+        "Products with limited available inventory and related demand.",
+        lowStockProducts.map(stockProductItem),
+        "Open customer demand",
+        openSales.map(salesOrderItem),
+        [
+          metric("At-risk products", lowStockProducts.length, "At or below threshold"),
+          metric("Reserved units", reservedProducts.reduce((sum, product) => sum + Number(product.reserved_qty ?? 0), 0), "Committed inventory"),
+          metric("Open sales orders", openSales.length, "Demand requiring stock"),
+        ],
+        lowStockProducts.map(stockItem),
+      );
+    case "owner/production-load":
+      return sectionData(
+        "Production load",
+        "Manufacturing demand and shop-floor operations.",
+        data.manufacturingOrders.map(manufacturingOrderItem),
+        "Work-order load",
+        data.workOrders.map(workOrderItem),
+        [
+          metric("Manufacturing orders", data.manufacturingOrders.length, "Production demand"),
+          metric("Open operations", data.workOrders.filter((order) => order.status !== "DONE").length, "Shop-floor workload"),
+          metric("Planned minutes", data.workOrders.reduce((sum, order) => sum + Number(order.duration_minutes ?? 0), 0), "Scheduled operation time"),
+        ],
+        [],
+      );
+    case "owner/delayed-orders":
+      return sectionData(
+        "Orders requiring attention",
+        "Open commercial, procurement, and production records.",
+        [
+          ...openSales.map(salesOrderItem),
+          ...pendingManufacturing.map(manufacturingOrderItem),
+          ...openPurchases.map(purchaseOrderItem),
+        ],
+        "Stock constraints",
+        lowStockProducts.map(stockProductItem),
+        [
+          metric("Open sales", openSales.length, "Customer orders"),
+          metric("Production pending", pendingManufacturing.length, "Manufacturing orders"),
+          metric("Purchases open", openPurchases.length, "Supplier orders"),
+        ],
+        lowStockProducts.map(stockItem),
+      );
+    default:
+      return sectionData(
+        "Section records",
+        "No specialized content is configured for this section yet.",
+        [],
+        "Related records",
+        [],
+        [metric("Records", 0, "No data available"), metric("Open", 0, "No open items"), metric("Attention", 0, "No alerts")],
+        data.stockItems,
+      );
+  }
+}
+
+function sectionData(
+  workTitle: string,
+  workDescription: string,
+  workItems: DashboardItem[],
+  sideTitle: string,
+  sideItems: DashboardItem[],
+  metrics: DashboardMetric[],
+  stockItems: StockItem[],
+): RoleBusinessData {
+  return {
+    metrics,
+    workTitle,
+    workDescription,
+    workItems: withEmptyState(workItems),
+    sideTitle,
+    sideItems: withEmptyState(sideItems),
+    stockItems,
+  };
+}
+
+function metric(label: string, value: string | number, detail: string): DashboardMetric {
+  return { label, value: String(value), detail };
+}
+
+function withEmptyState(items: DashboardItem[]) {
+  return items.length
+    ? items
+    : [{ title: "No records", description: "There are no records available for this section.", status: "Empty" }];
+}
+
 async function getProducts() {
   return (await sql`
-    SELECT p.name, p.sku, p.sale_price, p.cost_price, p.procurement_type, i.on_hand_qty, i.reserved_qty, p.image_url
+    SELECT p.name, p.sku, p.sale_price, p.cost_price, p.procurement_type, i.on_hand_qty, i.reserved_qty, p.image_url, p.product_type
     FROM products p
     LEFT JOIN inventory i ON i.product_id = p.id
     ORDER BY p.procurement_type, p.name
@@ -389,4 +1004,243 @@ function formatMoney(amount: number) {
     currency: "inr",
     maximumFractionDigits: 0,
   }).format(amount);
+}
+
+async function getUsers() {
+  return (await sql`
+    SELECT name, email, role, created_at
+    FROM users
+    ORDER BY name
+  `) as UserRow[];
+}
+
+async function getCustomers() {
+  return (await sql`
+    SELECT c.name, c.email, c.phone, COUNT(so.id)::int AS order_count
+    FROM customers c
+    LEFT JOIN sales_orders so ON so.customer_id = c.id
+    GROUP BY c.id
+    ORDER BY c.name
+  `) as CustomerRow[];
+}
+
+async function getSalesOrderItems() {
+  return (await sql`
+    SELECT so.order_number AS reference, p.name AS product_name, soi.quantity, soi.price::text AS unit_price, so.status
+    FROM sales_order_items soi
+    JOIN sales_orders so ON so.id = soi.sales_order_id
+    JOIN products p ON p.id = soi.product_id
+    ORDER BY so.created_at DESC, soi.id
+  `) as OrderItemRow[];
+}
+
+async function getPurchaseOrderItems() {
+  return (await sql`
+    SELECT po.po_number AS reference, p.name AS product_name, poi.quantity, poi.cost_price::text AS unit_price, po.status
+    FROM purchase_order_items poi
+    JOIN purchase_orders po ON po.id = poi.purchase_order_id
+    JOIN products p ON p.id = poi.product_id
+    ORDER BY po.created_at DESC, poi.id
+  `) as OrderItemRow[];
+}
+
+async function getBomItems() {
+  return (await sql`
+    SELECT p_parent.name AS product_name, p_comp.name AS component_name, bi.quantity::text
+    FROM bom_items bi
+    JOIN boms b ON b.id = bi.bom_id
+    JOIN products p_parent ON p_parent.id = b.product_id
+    JOIN products p_comp ON p_comp.id = bi.component_product_id
+    ORDER BY p_parent.name, p_comp.name
+  `) as BomRow[];
+}
+
+function formatDate(date: Date | string | null): string {
+  if (!date) return "N/A";
+  const d = new Date(date);
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function roleSummaryItems(users: UserRow[]): DashboardItem[] {
+  const counts: Record<string, number> = {};
+  for (const user of users) {
+    const role = user.role || "UNASSIGNED";
+    counts[role] = (counts[role] || 0) + 1;
+  }
+  return Object.entries(counts).map(([role, count]) => ({
+    title: role,
+    description: `${count} user(s) assigned`,
+    status: "Active",
+  }));
+}
+
+function accessItem(role: string, description: string): DashboardItem {
+  return {
+    title: role,
+    description,
+    status: "Role",
+  };
+}
+
+function settingItem(title: string, description: string, status: string): DashboardItem {
+  return {
+    title,
+    description,
+    status,
+  };
+}
+
+function moduleItem(title: string, count: number, description: string): DashboardItem {
+  return {
+    title,
+    description,
+    status: `${count} record(s)`,
+  };
+}
+
+function auditItem(log: AuditRow): DashboardItem {
+  return {
+    title: `${log.entity_type ?? "Entity"} / ${log.action ?? "Action"}`,
+    description: log.user_name ? `Performed by ${log.user_name}` : "System event",
+    status: "Logged",
+  };
+}
+
+function entitySummaryItems(logs: AuditRow[]): DashboardItem[] {
+  const counts: Record<string, number> = {};
+  for (const log of logs) {
+    if (log.entity_type) {
+      counts[log.entity_type] = (counts[log.entity_type] || 0) + 1;
+    }
+  }
+  return Object.entries(counts).map(([entity, count]) => ({
+    title: entity,
+    description: `${count} action(s) logged`,
+    status: "Audit",
+  }));
+}
+
+function customerItem(customer: CustomerRow): DashboardItem {
+  return {
+    title: customer.name,
+    description: customer.email ?? customer.phone ?? "No contact info",
+    status: `${customer.order_count} order(s)`,
+  };
+}
+
+function salesOrderItem(order: SalesOrderRow): DashboardItem {
+  return {
+    title: order.order_number ?? "Sales Order",
+    description: `${order.customer_name ?? "Unknown customer"} / ${order.item_count} item(s)`,
+    status: order.status ?? "DRAFT",
+  };
+}
+
+function purchaseOrderItem(order: PurchaseOrderRow): DashboardItem {
+  return {
+    title: order.po_number ?? "Purchase Order",
+    description: `${order.vendor_name ?? "Unknown vendor"} / ${order.item_count} item(s)`,
+    status: order.status ?? "DRAFT",
+  };
+}
+
+function manufacturingOrderItem(order: ManufacturingOrderRow): DashboardItem {
+  return {
+    title: order.mo_number ?? "Manufacturing Order",
+    description: `${order.product_name ?? "Product"} / Qty ${order.quantity ?? 0}`,
+    status: order.status ?? "WAITING",
+  };
+}
+
+function workOrderItem(workOrder: WorkOrderRow): DashboardItem {
+  return {
+    title: workOrder.operation_name ?? "Operation",
+    description: `${workOrder.mo_number ?? "MO"} / ${workOrder.duration_minutes ?? 0} min`,
+    status: workOrder.status ?? "WAITING",
+  };
+}
+
+function stockProductItem(product: ProductRow): DashboardItem {
+  return {
+    title: product.name,
+    description: product.sku ?? "No SKU",
+    status: `${availableQty(product)} available`,
+  };
+}
+
+function stockItem(product: ProductRow): StockItem {
+  const available = availableQty(product);
+  return {
+    name: product.name,
+    detail: `${product.sku} / ${product.procurement_type ?? "N/A"}`,
+    quantity: `${available} available`,
+    status: available <= 5 ? "Low stock" : "Healthy",
+    imageUrl: product.image_url,
+  };
+}
+
+function orderLineItem(line: OrderItemRow): DashboardItem {
+  return {
+    title: line.product_name ?? "Item",
+    description: `${line.reference ?? "Order"} / Qty ${line.quantity ?? 0} @ ${formatMoney(Number(line.unit_price ?? 0))}`,
+    status: line.status ?? "DRAFT",
+  };
+}
+
+function isRawMaterial(product: ProductRow): boolean {
+  return product.product_type === "RAW_MATERIAL";
+}
+
+function isReceipt(ledger: LedgerRow): boolean {
+  const type = ledger.movement_type?.toUpperCase() || "";
+  const ref = ledger.reference_type?.toUpperCase() || "";
+  return type === "IN" || type === "RECEIPT" || ref === "RECEIPT";
+}
+
+function isDelivery(ledger: LedgerRow): boolean {
+  const type = ledger.movement_type?.toUpperCase() || "";
+  const ref = ledger.reference_type?.toUpperCase() || "";
+  return type === "OUT" || type === "DELIVERY" || ref === "DELIVERY";
+}
+
+function ledgerItem(ledger: LedgerRow): DashboardItem {
+  return {
+    title: ledger.product_name ?? "Stock Movement",
+    description: `${ledger.reference_type ?? "Reference"} / ${ledger.notes ?? "No notes"}`,
+    status: `${ledger.movement_type ?? "MOVE"} ${ledger.quantity ?? 0}`,
+  };
+}
+
+function movementSummaryItems(ledger: LedgerRow[]): DashboardItem[] {
+  const counts: Record<string, number> = {};
+  for (const row of ledger) {
+    const type = row.movement_type || "UNKNOWN";
+    counts[type] = (counts[type] || 0) + 1;
+  }
+  return Object.entries(counts).map(([type, count]) => ({
+    title: type,
+    description: `${count} movement(s) logged`,
+    status: "Ledger",
+  }));
+}
+
+function sumQuantity(lines: OrderItemRow[]): number {
+  return lines.reduce((sum, line) => sum + (line.quantity ?? 0), 0);
+}
+
+function sumLineValue(lines: OrderItemRow[]): number {
+  return lines.reduce((sum, line) => sum + (line.quantity ?? 0) * Number(line.unit_price ?? 0), 0);
+}
+
+function sumOrderValue(orders: Array<{ total_amount: string | null }>): number {
+  return orders.reduce((sum, order) => sum + Number(order.total_amount ?? 0), 0);
+}
+
+function averageOrderValue(orders: Array<{ total_amount: string | null }>): number {
+  if (orders.length === 0) return 0;
+  return sumOrderValue(orders) / orders.length;
 }
