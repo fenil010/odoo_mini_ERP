@@ -8,12 +8,15 @@
     "start": "next start",
     "lint": "eslint",
     "migrate": "node scripts/migrate.mjs",
-    "seed": "bun seed.ts"
+    "seed:users": "bun seed.ts",
+    "seed:demo": "bun seed-demo-data.ts",
+    "seed": "bun seed.ts && bun seed-demo-data.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",
     "lucide-react": "^1.18.0",
     "next": "16.2.9",
+    "postgres": "^3.4.9",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "tailwind-merge": "^3.6.0"

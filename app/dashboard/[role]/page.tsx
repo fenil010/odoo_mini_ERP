@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
+import { getRoleBusinessData } from "@/lib/dashboard-data";
 import { cn } from "@/lib/utils";
 import { roleDashboards, roleOrder, type RoleKey, type SidebarIcon } from "../role-data";
 
@@ -63,7 +65,11 @@ export default async function RoleDashboardPage({ params }: RolePageProps) {
     notFound();
   }
 
+  await connection();
+
   const dashboard = roleDashboards[role];
+  const businessData = await getRoleBusinessData(role);
+  const SummaryIcon = iconMap[dashboard.sidebarSections[0].items[0].icon];
 
   return (
     <main className="min-h-screen bg-[#f7f4ed] text-[#1d2520]">
@@ -78,10 +84,21 @@ export default async function RoleDashboardPage({ params }: RolePageProps) {
             </Link>
           </div>
 
-          <div className="mt-7 rounded-lg border border-[#d9cfbd] bg-white/80 p-4 shadow-sm">
-            <p className="text-xs font-semibold uppercase text-[#176b5d]">{dashboard.dbRole}</p>
-            <h2 className="mt-2 text-xl font-semibold text-[#18231f]">{dashboard.sidebarTitle}</h2>
-            <p className="mt-2 text-sm leading-6 text-[#53645c]">{dashboard.responsibility}</p>
+          <div className="mt-7 border-b border-[#ded4c3] pb-5">
+            <div className="flex items-start gap-3">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-[#c9dbd5] bg-[#eef7f3] text-[#176b5d]">
+                <SummaryIcon className="size-5" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-[#176b5d]">
+                  {dashboard.dbRole}
+                </p>
+                <h2 className="mt-1 text-lg font-semibold leading-6 text-[#18231f]">
+                  {dashboard.sidebarTitle}
+                </h2>
+              </div>
+            </div>
+            <p className="mt-3 text-sm leading-5 text-[#53645c]">{dashboard.responsibility}</p>
           </div>
 
           <nav className="mt-6 flex-1 space-y-6">
@@ -155,7 +172,7 @@ export default async function RoleDashboardPage({ params }: RolePageProps) {
             </header>
 
             <div className="mt-6 grid gap-4 md:grid-cols-3">
-              {dashboard.metrics.map((metric) => (
+              {businessData.metrics.map((metric) => (
                 <div
                   key={metric.label}
                   className="rounded-lg border border-[#d9cfbd] bg-white p-5 shadow-sm"
@@ -171,56 +188,69 @@ export default async function RoleDashboardPage({ params }: RolePageProps) {
               <section className="rounded-lg border border-[#d9cfbd] bg-[#fbfaf6] p-5 shadow-sm">
                 <div className="flex items-center justify-between gap-4 border-b border-[#e5dccb] pb-4">
                   <div>
-                    <h2 className="text-xl font-semibold text-[#202a25]">Primary work</h2>
-                    <p className="mt-1 text-sm text-[#68756e]">Role-specific actions</p>
+                    <h2 className="text-xl font-semibold text-[#202a25]">{businessData.workTitle}</h2>
+                    <p className="mt-1 text-sm text-[#68756e]">{businessData.workDescription}</p>
                   </div>
                 </div>
 
                 <div className="mt-5 grid gap-4 md:grid-cols-3">
-                  {dashboard.actions.map((action) => (
-                    <Link
-                      key={action.title}
-                      href={action.href}
-                      className="rounded-lg border border-[#e3d8c5] bg-white p-4 transition hover:border-[#176b5d] hover:shadow-sm"
+                  {businessData.workItems.slice(0, 6).map((item) => (
+                    <article
+                      key={`${item.title}-${item.description}`}
+                      className="rounded-lg border border-[#e3d8c5] bg-white p-4"
                     >
-                      <h3 className="text-base font-semibold text-[#202a25]">{action.title}</h3>
-                      <p className="mt-3 text-sm leading-6 text-[#53645c]">
-                        {action.description}
-                      </p>
-                    </Link>
+                      <div className="flex items-start justify-between gap-3">
+                        <h3 className="text-base font-semibold text-[#202a25]">{item.title}</h3>
+                        <span className="rounded-lg bg-[#eef7f3] px-2 py-1 text-xs font-semibold text-[#176b5d]">
+                          {item.status}
+                        </span>
+                      </div>
+                      <p className="mt-3 text-sm leading-6 text-[#53645c]">{item.description}</p>
+                    </article>
                   ))}
                 </div>
               </section>
 
               <section className="rounded-lg border border-[#d9cfbd] bg-white p-5 shadow-sm">
-                <h2 className="text-xl font-semibold text-[#202a25]">Visible modules</h2>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {dashboard.modules.map((module) => (
-                    <span
-                      key={module}
-                      className="rounded-lg border border-[#d8cdb8] bg-[#f7f4ed] px-3 py-2 text-sm font-semibold text-[#405049]"
+                <h2 className="text-xl font-semibold text-[#202a25]">{businessData.sideTitle}</h2>
+                <div className="mt-4 grid gap-3">
+                  {businessData.sideItems.slice(0, 5).map((item) => (
+                    <article
+                      key={`${item.title}-${item.status}`}
+                      className="rounded-lg border border-[#e3d8c5] bg-[#fbfaf6] p-3"
                     >
-                      {module}
-                    </span>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-semibold text-[#202a25]">{item.title}</h3>
+                          <p className="mt-1 text-xs leading-5 text-[#53645c]">{item.description}</p>
+                        </div>
+                        <span className="shrink-0 rounded-lg bg-white px-2 py-1 text-xs font-semibold text-[#405049]">
+                          {item.status}
+                        </span>
+                      </div>
+                    </article>
                   ))}
                 </div>
               </section>
             </div>
 
             <section className="mt-6 overflow-hidden rounded-lg border border-[#d9cfbd] bg-white shadow-sm">
-              <div className="grid grid-cols-[1.1fr_0.8fr_0.7fr] border-b border-[#e5dccb] bg-[#fbfaf6] px-4 py-3 text-xs font-semibold uppercase text-[#68756e]">
-                <span>Work item</span>
+              <div className="grid grid-cols-[1fr_0.7fr_0.6fr] border-b border-[#e5dccb] bg-[#fbfaf6] px-4 py-3 text-xs font-semibold uppercase text-[#68756e]">
+                <span>Product / SKU</span>
+                <span>Available</span>
                 <span>Status</span>
-                <span>Owner</span>
               </div>
-              {dashboard.queue.map((item) => (
+              {businessData.stockItems.map((item) => (
                 <div
-                  key={item.item}
-                  className="grid grid-cols-[1.1fr_0.8fr_0.7fr] gap-3 border-b border-[#efe7d8] px-4 py-4 text-sm last:border-b-0"
+                  key={item.name}
+                  className="grid grid-cols-[1fr_0.7fr_0.6fr] gap-3 border-b border-[#efe7d8] px-4 py-4 text-sm last:border-b-0"
                 >
-                  <span className="font-semibold text-[#202a25]">{item.item}</span>
-                  <span className="text-[#53645c]">{item.status}</span>
-                  <span className="text-[#53645c]">{item.owner}</span>
+                  <span>
+                    <span className="block font-semibold text-[#202a25]">{item.name}</span>
+                    <span className="mt-1 block text-xs text-[#68756e]">{item.detail}</span>
+                  </span>
+                  <span className="text-[#53645c]">{item.quantity}</span>
+                  <span className="font-semibold text-[#176b5d]">{item.status}</span>
                 </div>
               ))}
             </section>
