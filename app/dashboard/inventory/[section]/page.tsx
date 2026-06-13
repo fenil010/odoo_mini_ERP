@@ -1,8 +1,9 @@
-import { getRoleSections } from "../../role-data";
+import { getRoleSectionsFromDB } from "@/lib/role-queries";
 import { RoleSectionPage } from "../../role-section-page";
 
-export function generateStaticParams() {
-  return getRoleSections("inventory").map((section) => ({ section }));
+export async function generateStaticParams() {
+  const sections = await getRoleSectionsFromDB("inventory");
+  return sections.map((section) => ({ section }));
 }
 
 export default function InventorySectionPage({
