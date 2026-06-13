@@ -21,6 +21,10 @@ type Product = {
   product_type: "FINISHED_GOOD" | "RAW_MATERIAL";
   on_hand_qty: number;
   reserved_qty: number;
+  shipping_charge?: string | number;
+  packing_charge?: string | number;
+  manufacturing_charge?: string | number;
+  other_charge?: string | number;
 };
 
 type Customer = {

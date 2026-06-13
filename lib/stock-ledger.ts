@@ -261,7 +261,6 @@ export async function startManufacturingOrderIfReady(tx: postgres.TransactionSql
   
   let allComponentsAvailable = true;
   const componentsToReserve = [];
-
   if (bom) {
     const bomItems = await tx`
       SELECT bi.component_product_id, bi.quantity, p.name as component_name
@@ -270,35 +269,50 @@ export async function startManufacturingOrderIfReady(tx: postgres.TransactionSql
       WHERE bi.bom_id = ${bom.id}
     `;
 
-    for (const item of bomItems) {
-      const neededQty = Number(item.quantity) * Number(mo.quantity);
+    // Extract and sort component product IDs numerically to prevent deadlocks
+    const componentIds = bomItems
+      .map((item) => Number(item.component_product_id))
+      .sort((a, b) => a - b);
 
-      await tx`
-        INSERT INTO inventory (product_id, on_hand_qty, reserved_qty)
-        VALUES (${item.component_product_id}, 0, 0)
-        ON CONFLICT (product_id) DO NOTHING
-      `;
-
-      const [inv] = await tx`
-        SELECT on_hand_qty, reserved_qty 
-        FROM inventory 
-        WHERE product_id = ${item.component_product_id}
-        FOR UPDATE
-      `;
-      const availableQty = Number(inv.on_hand_qty) - Number(inv.reserved_qty);
-
-      if (availableQty < neededQty) {
-        allComponentsAvailable = false;
-        break;
+    if (componentIds.length > 0) {
+      // 1. Ensure all inventory records exist
+      for (const id of componentIds) {
+        await tx`
+          INSERT INTO inventory (product_id, on_hand_qty, reserved_qty)
+          VALUES (${id}, 0, 0)
+          ON CONFLICT (product_id) DO NOTHING
+        `;
       }
 
-      componentsToReserve.push({
-        productId: item.component_product_id,
-        reserveQty: neededQty,
-      });
+      // 2. Lock inventory rows in sorted, deterministic order
+      const lockedInventory = await tx`
+        SELECT product_id, on_hand_qty, reserved_qty 
+        FROM inventory 
+        WHERE product_id IN (${componentIds}) 
+        ORDER BY product_id ASC 
+        FOR UPDATE
+      `;
+
+      const inventoryMap = new Map(lockedInventory.map((row) => [row.product_id, row]));
+
+      // 3. Verify availability of all components
+      for (const item of bomItems) {
+        const neededQty = Number(item.quantity) * Number(mo.quantity);
+        const inv = inventoryMap.get(item.component_product_id) || { on_hand_qty: 0, reserved_qty: 0 };
+        const availableQty = Number(inv.on_hand_qty) - Number(inv.reserved_qty);
+
+        if (availableQty < neededQty) {
+          allComponentsAvailable = false;
+          break;
+        }
+
+        componentsToReserve.push({
+          productId: item.component_product_id,
+          reserveQty: neededQty,
+        });
+      }
     }
   }
-
   if (allComponentsAvailable) {
     // 1. Reserve all components in the stock ledger
     for (const comp of componentsToReserve) {

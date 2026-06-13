@@ -58,25 +58,39 @@ export async function runProcurementEngine(
     
     throw new Error(`Unknown procurement type: ${product.procurement_type}`);
   }
-
   if (normalizedType === "MANUFACTURE") {
+    // Check for existing unfulfilled Manufacturing Orders to prevent duplicate runs
+    const existingMfgResult = await tx`
+      SELECT COALESCE(SUM(quantity), 0)::int as total
+      FROM manufacturing_orders
+      WHERE product_id = ${productId}
+        AND status IN ('WAITING_MATERIALS', 'READY', 'IN_PROGRESS')
+    `;
+    const existingMfgQty = existingMfgResult[0]?.total || 0;
+    const adjustedQty = shortageQty - existingMfgQty;
+
+    if (adjustedQty <= 0) {
+      console.log(`[runProcurementEngine] Sufficient unfulfilled Manufacturing Orders exist (${existingMfgQty} units) for product ID ${productId}. Skipping new MO creation.`);
+      return;
+    }
+
     const moNumber = generateOrderNumber("MO");
 
     // Create Manufacturing Order with WAITING_MATERIALS status initially
     const moResult = await tx<{ id: number }[]>`
       INSERT INTO manufacturing_orders (mo_number, product_id, quantity, status, sales_order_id, created_at)
-      VALUES (${moNumber}, ${productId}, ${shortageQty}, 'WAITING_MATERIALS', ${salesOrderId || null}, NOW())
+      VALUES (${moNumber}, ${productId}, ${adjustedQty}, 'WAITING_MATERIALS', ${salesOrderId || null}, NOW())
       RETURNING id
     `;
     const moId = moResult[0].id;
 
-    // Create audit entry for auto-generated MO (CRITICAL FIX 12)
+    // Create audit entry for auto-generated MO
     await logAudit(tx, {
       userId,
       entityType: "manufacturing_orders",
       entityId: moId,
       action: "AUTO_CREATE",
-      newValue: { moNumber, productId, quantity: shortageQty, status: 'WAITING_MATERIALS', salesOrderId },
+      newValue: { moNumber, productId, quantity: adjustedQty, status: 'WAITING_MATERIALS', salesOrderId },
     });
 
     // Fetch Bill of Materials (BoM)
@@ -95,7 +109,7 @@ export async function runProcurementEngine(
       let allComponentsAvailable = true;
 
       for (const item of bomItems) {
-        const neededQty = Number(item.quantity) * shortageQty;
+        const neededQty = Number(item.quantity) * adjustedQty;
         
         // Ensure inventory record exists
         await tx`
@@ -130,6 +144,22 @@ export async function runProcurementEngine(
     // Automatically check and start production if components are ready!
     await startManufacturingOrderIfReady(tx, moId, userId);
   } else if (normalizedType === "PURCHASE") {
+    // Check for existing unfulfilled Purchase Orders to prevent duplicate vendor orders
+    const existingPoResult = await tx`
+      SELECT COALESCE(SUM(poi.quantity), 0)::int as total
+      FROM purchase_order_items poi
+      JOIN purchase_orders po ON po.id = poi.purchase_order_id
+      WHERE poi.product_id = ${productId}
+        AND po.status IN ('DRAFT', 'CONFIRMED', 'SHIPPED')
+    `;
+    const existingPoQty = existingPoResult[0]?.total || 0;
+    const adjustedQty = shortageQty - existingPoQty;
+
+    if (adjustedQty <= 0) {
+      console.log(`[runProcurementEngine] Sufficient unfulfilled Purchase Orders exist (${existingPoQty} units) for product ID ${productId}. Skipping new PO creation.`);
+      return;
+    }
+
     const poNumber = generateOrderNumber("PO");
 
     let vendorId = null;
@@ -170,16 +200,16 @@ export async function runProcurementEngine(
 
     await tx`
       INSERT INTO purchase_order_items (purchase_order_id, product_id, quantity, cost_price)
-      VALUES (${poId}, ${productId}, ${shortageQty}, ${costPrice})
+      VALUES (${poId}, ${productId}, ${adjustedQty}, ${costPrice})
     `;
 
-    // Create audit entry for auto-generated PO (CRITICAL FIX 12)
+    // Create audit entry for auto-generated PO
     await logAudit(tx, {
       userId,
       entityType: "purchase_orders",
       entityId: poId,
       action: "AUTO_CREATE",
-      newValue: { poNumber, vendorId, productId, quantity: shortageQty, costPrice },
+      newValue: { poNumber, vendorId, productId, quantity: adjustedQty, costPrice },
     });
   }
 }

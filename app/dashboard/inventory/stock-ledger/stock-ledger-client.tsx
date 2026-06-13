@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 import StatusBadge from "@/app/components/ui/StatusBadge";
 import EmptyState from "@/app/components/ui/EmptyState";
@@ -23,7 +24,8 @@ type StockLedgerClientProps = {
 
 export default function StockLedgerClient({ initialLedger }: StockLedgerClientProps) {
   const [ledger] = useState<LedgerEntry[]>(initialLedger);
-  const [searchTerm, setSearchTerm] = useState("");
+  const searchParams = useSearchParams();
+  const [searchTerm, setSearchTerm] = useState(searchParams ? (searchParams.get("search") || "") : "");
   const [movementFilter, setMovementFilter] = useState("ALL");
 
   const filteredLedger = ledger.filter((entry) => {

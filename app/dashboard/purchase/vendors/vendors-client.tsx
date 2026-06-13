@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import { Plus, Search, Edit2, Trash2, Loader2 } from "lucide-react";
 import { createVendorAction, updateVendorAction, deleteVendorAction } from "@/app/actions/vendors";
 import Modal from "@/app/components/ui/Modal";
@@ -29,7 +30,8 @@ type VendorsClientProps = {
 
 export default function VendorsClient({ initialVendors, products = [] }: VendorsClientProps) {
   const [vendors, setVendors] = useState<Vendor[]>(initialVendors);
-  const [searchTerm, setSearchTerm] = useState("");
+  const searchParams = useSearchParams();
+  const [searchTerm, setSearchTerm] = useState(searchParams ? (searchParams.get("search") || "") : "");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
