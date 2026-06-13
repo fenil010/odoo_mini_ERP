@@ -1,0 +1,593 @@
+# Mini ERP System
+
+## From Demand to Delivery
+
+---
+
+# Project Overview
+
+Mini ERP is a web-based Enterprise Resource Planning system designed for manufacturing businesses.
+
+The goal is to connect:
+
+* Products
+* Inventory
+* Sales
+* Purchase
+* Manufacturing
+* Procurement
+* Audit Logs
+
+into a single centralized platform.
+
+Instead of managing operations through spreadsheets and manual processes, the ERP automates stock tracking, manufacturing planning, procurement decisions, and order fulfillment.
+
+---
+
+# Tech Stack
+
+Frontend:
+
+* Next.js 15
+* TypeScript
+* Tailwind CSS
+* ShadCN UI
+
+Backend:
+
+* Next.js Server Actions
+* Next.js Route Handlers
+
+Database:
+
+* PostgreSQL
+
+Authentication:
+
+* JWT
+* Role Based Access Control
+
+Deployment:
+
+* Vercel
+* PostgreSQL Cloud Database
+
+---
+
+# Why Next.js?
+
+We chose Next.js because it provides:
+
+* Frontend and Backend in one codebase
+* Server Components
+* Server Actions
+* Fast development speed
+* Easy deployment
+* Excellent TypeScript support
+
+For a hackathon this reduces development time significantly.
+
+---
+
+# Why PostgreSQL?
+
+We chose PostgreSQL because:
+
+* Strong relational support
+* ACID compliance
+* Foreign Keys
+* Transaction support
+* Complex reporting queries
+* Ideal for ERP systems
+
+ERP applications have many relationships:
+
+Customer
+→ Sales Order
+
+Sales Order
+→ Manufacturing Order
+
+Manufacturing Order
+→ BoM
+
+BoM
+→ Components
+
+Purchase Order
+→ Vendors
+
+PostgreSQL handles these relationships very efficiently.
+
+---
+
+# Core Business Problem
+
+The company currently manages operations using:
+
+* Excel Sheets
+* WhatsApp Messages
+* Manual Registers
+
+This causes:
+
+* Inventory mismatch
+* Delayed deliveries
+* Missing procurement
+* Manufacturing confusion
+
+Our ERP solves these issues.
+
+---
+
+# Main Users
+
+## Admin
+
+Responsibilities:
+
+* Full system access
+* Manage users
+* Manage permissions
+* View audit logs
+
+---
+
+## Sales User
+
+Responsibilities:
+
+* Create sales orders
+* Manage customers
+* Track order status
+
+Manual Actions:
+
+* Create order
+* Confirm order
+
+System Automation:
+
+* Stock check
+* Shortage calculation
+* Procurement trigger
+
+---
+
+## Purchase User
+
+Responsibilities:
+
+* Manage vendors
+* Confirm purchase orders
+
+Manual Actions:
+
+* Confirm purchase order
+
+System Automation:
+
+* Purchase order generation
+* Material shortage detection
+
+---
+
+## Manufacturing User
+
+Responsibilities:
+
+* Manage manufacturing orders
+* Execute work orders
+
+Manual Actions:
+
+* Start production
+* Complete production
+
+System Automation:
+
+* BoM loading
+* Material calculations
+
+---
+
+## Inventory Manager
+
+Responsibilities:
+
+* Receive materials
+* Deliver products
+* Monitor inventory
+
+Manual Actions:
+
+* Receive stock
+* Deliver stock
+
+System Automation:
+
+* Inventory updates
+* Stock ledger creation
+
+---
+
+## Business Owner
+
+Responsibilities:
+
+* Dashboard
+* Product management
+* Business monitoring
+
+---
+
+# Core Modules
+
+## Product Module
+
+Features:
+
+* Create products
+* Update products
+* Procurement configuration
+* Pricing configuration
+
+Product Types:
+
+* Finished Goods
+* Raw Materials
+
+Example:
+
+Dining Table
+
+Procurement Type:
+MANUFACTURE
+
+---
+
+## Inventory Module
+
+Features:
+
+* On Hand Quantity
+* Reserved Quantity
+* Available Quantity
+
+Formula:
+
+Available Qty = On Hand Qty - Reserved Qty
+
+---
+
+## Sales Module
+
+Features:
+
+* Create Sales Orders
+* Customer Management
+* Order Tracking
+
+Workflow:
+
+Draft
+→ Confirmed
+→ Delivered
+
+---
+
+## Purchase Module
+
+Features:
+
+* Vendor Management
+* Purchase Orders
+* Goods Receipt
+
+Workflow:
+
+Draft
+→ Confirmed
+→ Received
+
+---
+
+## Manufacturing Module
+
+Features:
+
+* Manufacturing Orders
+* Work Orders
+* Production Tracking
+
+Workflow:
+
+Waiting Materials
+→ Ready
+→ In Progress
+→ Completed
+
+---
+
+## BoM Module
+
+BoM = Bill Of Materials
+
+Example:
+
+Dining Table
+
+Requires:
+
+4 Wooden Legs
+1 Wooden Top
+12 Screws
+
+---
+
+# Automation Engine
+
+This is the most important part of the ERP.
+
+---
+
+## Automation #1
+
+Sales Order Confirmation
+
+Customer Orders:
+
+20 Dining Tables
+
+Available:
+
+5
+
+System Calculates:
+
+Shortage = 15
+
+---
+
+## Automation #2
+
+Manufacturing Order Creation
+
+System Automatically Creates:
+
+MO001
+
+Dining Table
+
+Qty: 15
+
+---
+
+## Automation #3
+
+BoM Calculation
+
+System Reads:
+
+4 Legs
+1 Top
+12 Screws
+
+Needed For 15 Tables:
+
+60 Legs
+15 Tops
+180 Screws
+
+---
+
+## Automation #4
+
+Material Check
+
+System Verifies:
+
+Do materials exist?
+
+If No:
+
+Create Purchase Order
+
+---
+
+## Automation #5
+
+Purchase Order Generation
+
+System Creates:
+
+PO001
+
+Wooden Legs
+
+Qty: 30
+
+---
+
+## Automation #6
+
+Inventory Update
+
+When stock received:
+
+Inventory automatically increases.
+
+---
+
+## Automation #7
+
+Manufacturing Completion
+
+Raw Materials:
+Consumed
+
+Finished Goods:
+Produced
+
+Inventory automatically updates.
+
+---
+
+## Automation #8
+
+Delivery
+
+Finished Goods stock automatically decreases.
+
+---
+
+# Full Business Flow
+
+Customer
+↓
+Sales Order
+↓
+Stock Check
+↓
+Manufacturing Order
+↓
+BoM Calculation
+↓
+Material Check
+↓
+Purchase Order
+↓
+Receive Materials
+↓
+Manufacturing
+↓
+Inventory Update
+↓
+Delivery
+
+---
+
+# Database Design Philosophy
+
+Inventory is the center of the ERP.
+
+Every module affects inventory.
+
+Sales:
+Decreases stock
+
+Purchase:
+Increases stock
+
+Manufacturing:
+Consumes materials
+Produces finished goods
+
+Procurement:
+Replenishes stock
+
+---
+
+# Folder Structure
+
+src/
+
+app/
+
+dashboard/
+
+products/
+
+sales/
+
+purchase/
+
+manufacturing/
+
+inventory/
+
+users/
+
+api/
+
+components/
+
+features/
+
+products/
+
+sales/
+
+purchase/
+
+manufacturing/
+
+inventory/
+
+lib/
+
+db/
+
+auth/
+
+services/
+
+automation/
+
+types/
+
+---
+
+# Future Enhancements
+
+* Work Centers
+* Warehouse Management
+* Multi Location Inventory
+* Barcode Scanning
+* Supplier Quotations
+* Production Scheduling
+* Demand Forecasting
+
+---
+
+# Hackathon Demo Scenario
+
+Customer Orders:
+20 Dining Tables
+
+Stock:
+5
+
+System Creates:
+MO001
+
+Materials Missing:
+30 Legs
+
+System Creates:
+PO001
+
+Inventory Receives Materials
+
+Manufacturing Completes
+
+Inventory Produces:
+15 Tables
+
+Sales Order Delivered
+
+This demonstrates:
+
+Sales
+Purchase
+Manufacturing
+Inventory
+Automation
+
+working together as a complete ERP system.
+
+---
+
+# Interview One-Line Summary
+
+This ERP is an inventory-centric system where sales create demand, procurement fulfills shortages, manufacturing produces finished goods, and every inventory movement is automatically tracked for complete business visibility.
