@@ -1,4 +1,5 @@
 import Link from "next/link";
+import SignupForm from "./signup-form";
 
 export default function SignupPage() {
   return (
@@ -34,78 +35,7 @@ export default function SignupPage() {
           </div>
 
           <div className="w-full rounded-lg border border-[#d9cfbd] bg-[#fbfaf6] p-6 shadow-xl shadow-[#8a7d681f] sm:p-8">
-            <form className="grid gap-5">
-              <div>
-                <label htmlFor="name" className="text-sm font-semibold text-[#2b3933]">
-                  Name
-                </label>
-                <input
-                  id="name"
-                  name="name"
-                  type="text"
-                  autoComplete="name"
-                  required
-                  className="mt-2 h-12 w-full rounded-lg border border-[#cfc3ad] bg-white px-4 text-base outline-none transition focus:border-[#176b5d] focus:ring-2 focus:ring-[#176b5d]/20"
-                  placeholder="Full name"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="email" className="text-sm font-semibold text-[#2b3933]">
-                  Email
-                </label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  className="mt-2 h-12 w-full rounded-lg border border-[#cfc3ad] bg-white px-4 text-base outline-none transition focus:border-[#176b5d] focus:ring-2 focus:ring-[#176b5d]/20"
-                  placeholder="you@company.com"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="role" className="text-sm font-semibold text-[#2b3933]">
-                  Role
-                </label>
-                <select
-                  id="role"
-                  name="role"
-                  className="mt-2 h-12 w-full rounded-lg border border-[#cfc3ad] bg-white px-4 text-base outline-none transition focus:border-[#176b5d] focus:ring-2 focus:ring-[#176b5d]/20"
-                  defaultValue="ADMIN"
-                >
-                  <option value="ADMIN">Admin</option>
-                  <option value="SALES">Sales User</option>
-                  <option value="PURCHASE">Purchase User</option>
-                  <option value="MANUFACTURING">Manufacturing User</option>
-                  <option value="INVENTORY">Inventory Manager</option>
-                  <option value="OWNER">Business Owner</option>
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="password" className="text-sm font-semibold text-[#2b3933]">
-                  Password
-                </label>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  className="mt-2 h-12 w-full rounded-lg border border-[#cfc3ad] bg-white px-4 text-base outline-none transition focus:border-[#176b5d] focus:ring-2 focus:ring-[#176b5d]/20"
-                  placeholder="Create a password"
-                />
-              </div>
-
-              <button
-                type="button"
-                className="mt-2 h-12 rounded-lg bg-[#176b5d] px-5 text-base font-semibold text-white shadow-sm transition hover:bg-[#12574b]"
-              >
-                Sign up
-              </button>
-            </form>
+            <SignupForm />
 
             <p className="mt-6 text-center text-sm text-[#53645c]">
               Already have access?{" "}
