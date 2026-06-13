@@ -1,11 +1,13 @@
 import { sql } from "./db";
+import { cache } from "react";
 import type { RoleKey, RoleDashboard } from "@/app/dashboard/role-data";
 
 /**
  * Fetch a single role's complete configuration from database
  * Includes role metadata, menu sections, items, and modules
+ * Wrapped in React cache() — deduplicated per server request.
  */
-export async function getRoleDashboardFromDB(
+export const getRoleDashboardFromDB = cache(async function _getRoleDashboardFromDB(
   roleKey: RoleKey
 ): Promise<RoleDashboard | null> {
   try {
@@ -74,7 +76,7 @@ export async function getRoleDashboardFromDB(
     console.error(`Error fetching role dashboard for ${roleKey}:`, error);
     return null;
   }
-}
+});
 
 /**
  * Fetch all roles from database
@@ -116,8 +118,10 @@ export async function getRolePageFromDB(
       return items[0] || null;
     }
 
+    // Match by the last segment of the stored href (e.g. "sales-orders" matches "/dashboard/sales/sales-orders")
+    // This allows the admin sidebar items that point to /dashboard/sales/... to be found correctly
     return (
-      items.find((item) => item.href === `/dashboard/${roleKey}/${section}`) ||
+      items.find((item) => item.href.endsWith(`/${section}`)) ||
       null
     );
   } catch (error) {

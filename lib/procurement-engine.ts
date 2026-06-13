@@ -17,15 +17,16 @@ export async function runProcurementEngine(
     shortageQty: number;
     salesOrderId?: number;
     userId: number;
+    parentManufacturingOrderId?: number;
   },
   visited: Set<number> = new Set()
 ) {
-  const { productId, shortageQty: rawShortageQty, salesOrderId, userId } = params;
+  const { productId, shortageQty: rawShortageQty, salesOrderId, userId, parentManufacturingOrderId } = params;
   const shortageQty = Math.ceil(rawShortageQty);
 
   // 1. Cycle detection (CRITICAL FIX 6)
   if (visited.has(productId)) {
-    throw new Error(`Circular BoM dependency detected for product ID ${productId}`);
+    throw new Error("Circular Bill Of Materials detected.");
   }
   visited.add(productId);
 
@@ -58,6 +59,7 @@ export async function runProcurementEngine(
     
     throw new Error(`Unknown procurement type: ${product.procurement_type}`);
   }
+
   if (normalizedType === "MANUFACTURE") {
     // Check for existing unfulfilled Manufacturing Orders to prevent duplicate runs
     const existingMfgResult = await tx`
@@ -65,6 +67,7 @@ export async function runProcurementEngine(
       FROM manufacturing_orders
       WHERE product_id = ${productId}
         AND status IN ('WAITING_MATERIALS', 'READY', 'IN_PROGRESS')
+        AND (sales_order_id = ${salesOrderId || null} OR (sales_order_id IS NULL AND parent_manufacturing_order_id IS NULL))
     `;
     const existingMfgQty = existingMfgResult[0]?.total || 0;
     const adjustedQty = shortageQty - existingMfgQty;
@@ -78,8 +81,8 @@ export async function runProcurementEngine(
 
     // Create Manufacturing Order with WAITING_MATERIALS status initially
     const moResult = await tx<{ id: number }[]>`
-      INSERT INTO manufacturing_orders (mo_number, product_id, quantity, status, sales_order_id, created_at)
-      VALUES (${moNumber}, ${productId}, ${adjustedQty}, 'WAITING_MATERIALS', ${salesOrderId || null}, NOW())
+      INSERT INTO manufacturing_orders (mo_number, product_id, quantity, status, sales_order_id, parent_manufacturing_order_id, created_at)
+      VALUES (${moNumber}, ${productId}, ${adjustedQty}, 'WAITING_MATERIALS', ${salesOrderId || null}, ${parentManufacturingOrderId || null}, NOW())
       RETURNING id
     `;
     const moId = moResult[0].id;
@@ -90,7 +93,7 @@ export async function runProcurementEngine(
       entityType: "manufacturing_orders",
       entityId: moId,
       action: "AUTO_CREATE",
-      newValue: { moNumber, productId, quantity: adjustedQty, status: 'WAITING_MATERIALS', salesOrderId },
+      newValue: { moNumber, productId, quantity: adjustedQty, status: 'WAITING_MATERIALS', salesOrderId, parentManufacturingOrderId },
     });
 
     // Fetch Bill of Materials (BoM)
@@ -105,8 +108,6 @@ export async function runProcurementEngine(
         FROM bom_items
         WHERE bom_id = ${bom.id}
       `;
-
-      let allComponentsAvailable = true;
 
       for (const item of bomItems) {
         const neededQty = Number(item.quantity) * adjustedQty;
@@ -127,7 +128,6 @@ export async function runProcurementEngine(
         const availableQty = inv.on_hand_qty - inv.reserved_qty;
 
         if (availableQty < neededQty) {
-          allComponentsAvailable = false;
           const componentShortage = neededQty - availableQty;
 
           // Recursively trigger procurement engine for missing raw materials/components
@@ -136,6 +136,7 @@ export async function runProcurementEngine(
             shortageQty: componentShortage,
             salesOrderId,
             userId,
+            parentManufacturingOrderId: moId,
           }, new Set(visited));
         }
       }
@@ -151,6 +152,7 @@ export async function runProcurementEngine(
       JOIN purchase_orders po ON po.id = poi.purchase_order_id
       WHERE poi.product_id = ${productId}
         AND po.status IN ('DRAFT', 'CONFIRMED', 'SHIPPED')
+        AND (po.sales_order_id = ${salesOrderId || null} OR (po.sales_order_id IS NULL AND po.manufacturing_order_id IS NULL))
     `;
     const existingPoQty = existingPoResult[0]?.total || 0;
     const adjustedQty = shortageQty - existingPoQty;
@@ -187,8 +189,8 @@ export async function runProcurementEngine(
     }
 
     const poResult = await tx<{ id: number }[]>`
-      INSERT INTO purchase_orders (po_number, vendor_id, status, sales_order_id, created_by, created_at)
-      VALUES (${poNumber}, ${vendorId}, 'DRAFT', ${salesOrderId || null}, ${userId}, NOW())
+      INSERT INTO purchase_orders (po_number, vendor_id, status, sales_order_id, manufacturing_order_id, created_by, created_at)
+      VALUES (${poNumber}, ${vendorId}, 'DRAFT', ${salesOrderId || null}, ${parentManufacturingOrderId || null}, ${userId}, NOW())
       RETURNING id
     `;
     const poId = poResult[0].id;
@@ -209,7 +211,7 @@ export async function runProcurementEngine(
       entityType: "purchase_orders",
       entityId: poId,
       action: "AUTO_CREATE",
-      newValue: { poNumber, vendorId, productId, quantity: adjustedQty, costPrice },
+      newValue: { poNumber, vendorId, productId, quantity: adjustedQty, costPrice, parentManufacturingOrderId },
     });
   }
 }

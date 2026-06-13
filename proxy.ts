@@ -58,6 +58,10 @@ export async function proxy(request: NextRequest) {
   );
 
   if (routeEntry && session.roleKey !== routeEntry.roleKey) {
+    // ADMIN has superuser access — allow through any dashboard route
+    if (session.roleKey === "admin") {
+      return NextResponse.next();
+    }
     // User is authenticated but accessing a dashboard they don't own
     const ownDashboard = new URL(
       ROLE_DASHBOARD[session.roleKey],

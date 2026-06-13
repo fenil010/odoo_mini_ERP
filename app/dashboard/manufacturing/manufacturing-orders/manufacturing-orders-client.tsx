@@ -37,6 +37,7 @@ type MO = {
   status: string;
   sales_order_number: string | null;
   created_at: string;
+  parent_manufacturing_order_id?: number | null;
 };
 
 type Product = {
@@ -44,12 +45,40 @@ type Product = {
   name: string;
   sku: string;
 };
+
+type BomComponent = {
+  parent_product_id: number;
+  component_product_id: number;
+  component_name: string;
+  component_sku: string;
+  component_procurement_type: string;
+  quantity_required: number;
+  on_hand_qty: number;
+  reserved_qty: number;
+};
+
+type POItem = {
+  id: number;
+  po_number: string;
+  status: string;
+  manufacturing_order_id: number | null;
+  product_id: number;
+  quantity: number;
+};
+
 type MOrdersClientProps = {
   initialOrders: MO[];
   products: Product[];
+  bomComponents: BomComponent[];
+  purchaseOrderItems: POItem[];
 };
 
-export default function ManufacturingOrdersClient({ initialOrders, products }: MOrdersClientProps) {
+export default function ManufacturingOrdersClient({ 
+  initialOrders, 
+  products, 
+  bomComponents, 
+  purchaseOrderItems 
+}: MOrdersClientProps) {
   const [orders, setOrders] = useState<MO[]>(initialOrders);
   const searchParams = useSearchParams();
   const [searchTerm, setSearchTerm] = useState(searchParams ? (searchParams.get("search") || "") : "");
@@ -89,26 +118,21 @@ export default function ManufacturingOrdersClient({ initialOrders, products }: M
     COMPLETED: orders.filter((o) => o.status === "COMPLETED").length,
   };
 
-  // Mock components for BoM breakdown & mock operations in the drawer
-  const mockBoms: Record<string, Array<{ name: string; qtyRequired: number; qtyAvailable: number }>> = {
-    "Table": [
-      { name: "Raw Wood Plank", qtyRequired: 4, qtyAvailable: 25 },
-      { name: "Wood Screws", qtyRequired: 16, qtyAvailable: 120 },
-      { name: "Wood Varnish", qtyRequired: 1, qtyAvailable: 5 },
-    ],
-    "Chair": [
-      { name: "Raw Wood Plank", qtyRequired: 2, qtyAvailable: 25 },
-      { name: "Wood Screws", qtyRequired: 8, qtyAvailable: 120 },
-      { name: "Cushion Padding", qtyRequired: 1, qtyAvailable: 0 }, // Shortage case!
-    ],
-  };
-
-  const getBom = (productName: string, multiplier: number) => {
-    const key = productName.includes("Chair") ? "Chair" : "Table";
-    return (mockBoms[key] || mockBoms["Table"]).map(item => ({
-      ...item,
-      qtyRequired: item.qtyRequired * multiplier
-    }));
+  const getBom = (productId: number, multiplier: number) => {
+    return bomComponents
+      .filter((item) => item.parent_product_id === productId)
+      .map((item) => {
+        const qtyRequired = item.quantity_required * multiplier;
+        const qtyAvailable = item.on_hand_qty - item.reserved_qty;
+        return {
+          id: item.component_product_id,
+          name: item.component_name,
+          sku: item.component_sku,
+          procurementType: item.component_procurement_type,
+          qtyRequired,
+          qtyAvailable,
+        };
+      });
   };
 
   const mockOperations = [
@@ -385,9 +409,8 @@ export default function ManufacturingOrdersClient({ initialOrders, products }: M
               <div className="flex-1 overflow-y-auto p-6 space-y-6">
                 
                 {activeTab === "DETAILS" && (
-                  <div className="space-y-6">
-                    {/* General Product Info Card */}
-                    <div className="rounded-xl border border-[#ded4c3] p-4 bg-white flex gap-4 items-center">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 bg-[#fbfaf6] border border-[#ded4c3] rounded-xl p-4">
                       <div className="flex size-10 items-center justify-center rounded-lg bg-purple-50 text-purple-700 border border-purple-200">
                         <Wrench className="size-5" />
                       </div>
@@ -413,16 +436,113 @@ export default function ManufacturingOrdersClient({ initialOrders, products }: M
                       </div>
                     </div>
 
-                    {selectedOrder.status === "WAITING_MATERIALS" && (
-                      <div className="flex items-start gap-2.5 rounded-lg border border-[#e4b7a3] bg-[#fff2eb] p-3.5 text-xs text-[#8b3d1e] leading-5">
-                        <AlertTriangle className="size-4 shrink-0 mt-0.5 animate-bounce" />
-                        <div>
-                          <strong>Stock Shortage Lock:</strong> Components are short in the warehouse. 
-                          The procurement planning engine has scheduled automatic purchase requests. 
-                          Once materials arrive, this order will advance to <strong>READY</strong>.
+                    {selectedOrder.status === "WAITING_MATERIALS" && (() => {
+                      const bom = getBom(selectedOrder.product_id, selectedOrder.quantity);
+                      const shortages = bom.filter(c => c.qtyAvailable < c.qtyRequired);
+                      
+                      const mfgShortages = shortages.filter(c => c.procurementType === "MANUFACTURE");
+                      const purShortages = shortages.filter(c => c.procurementType === "PURCHASE");
+
+                      const childMOs = orders.filter(o => o.parent_manufacturing_order_id === selectedOrder.id);
+                      const childPOs = purchaseOrderItems.filter(poi => poi.manufacturing_order_id === selectedOrder.id);
+
+                      return (
+                        <div className="space-y-3 rounded-lg border border-[#e4b7a3] bg-[#fff2eb] p-4 text-xs text-[#8b3d1e] leading-5">
+                          <div className="flex items-start gap-2.5">
+                            <AlertTriangle className="size-4 shrink-0 mt-0.5 animate-bounce text-red-600" />
+                            <div>
+                              <strong>Stock Shortage Lock:</strong> Some required components are missing in the warehouse.
+                            </div>
+                          </div>
+
+                          <div className="mt-2 text-[#7c3214] space-y-3.5 border-t border-[#f4dfd4] pt-3">
+                            <div>
+                              <p className="font-semibold uppercase text-[10px] tracking-wider text-[#8b3d1e]">Missing Components:</p>
+                              <ul className="list-disc list-inside mt-1 space-y-1">
+                                {shortages.map(s => (
+                                  <li key={s.id}>
+                                    {s.name} ({s.sku}) — Deficit: <strong>{s.qtyRequired - s.qtyAvailable} units</strong> (Available: {s.qtyAvailable}, Needed: {s.qtyRequired})
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+
+                            {mfgShortages.length > 0 && (
+                              <div className="space-y-1 bg-white/50 p-2.5 rounded-lg border border-[#f4dcd0]">
+                                <p className="font-bold text-[10px] uppercase tracking-wider text-[#8b3d1e]">Scheduled Child MOs:</p>
+                                <p className="text-[11px] text-[#733519] leading-relaxed">
+                                  These are manufactured sub-assemblies. The system has created child orders to produce them.
+                                </p>
+                                <div className="mt-1.5 space-y-1 text-[11px]">
+                                  {mfgShortages.map(s => {
+                                    const relatedMO = childMOs.find(o => o.product_id === s.id);
+                                    return (
+                                      <div key={s.id} className="flex justify-between items-center bg-white/60 px-2 py-1 rounded border border-[#f4dfd4]/30">
+                                        <span>{s.name}</span>
+                                        {relatedMO ? (
+                                          <span className="font-mono bg-[#8b3d1e]/15 text-[#8b3d1e] px-1.5 py-0.5 rounded font-bold">
+                                            {relatedMO.mo_number} ({relatedMO.status})
+                                          </span>
+                                        ) : (
+                                          <span className="text-red-700 italic font-medium">No active MO found</span>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {purShortages.length > 0 && (
+                              <div className="space-y-1 bg-white/50 p-2.5 rounded-lg border border-[#f4dcd0]">
+                                <p className="font-bold text-[10px] uppercase tracking-wider text-[#8b3d1e]">Scheduled Purchase Orders (POs):</p>
+                                <p className="text-[11px] text-[#733519] leading-relaxed">
+                                  These are raw materials. The system has scheduled purchase orders to restock them.
+                                </p>
+                                <div className="mt-1.5 space-y-1 text-[11px]">
+                                  {purShortages.map(s => {
+                                    const relatedPO = childPOs.find(poi => poi.product_id === s.id);
+                                    return (
+                                      <div key={s.id} className="flex justify-between items-center bg-white/60 px-2 py-1 rounded border border-[#f4dfd4]/30">
+                                        <span>{s.name}</span>
+                                        {relatedPO ? (
+                                          <span className="font-mono bg-[#8b3d1e]/15 text-[#8b3d1e] px-1.5 py-0.5 rounded font-bold">
+                                            {relatedPO.po_number} ({relatedPO.status})
+                                          </span>
+                                        ) : (
+                                          <span className="text-red-700 italic font-medium">No active PO found</span>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="border-t border-[#f4dfd4] pt-3">
+                              <p className="font-bold uppercase text-[10px] tracking-wider text-[#8b3d1e]">What you should do next:</p>
+                              <ul className="list-disc list-inside mt-1.5 text-[11px] text-[#7c3214] space-y-1 bg-[#fff8f5] border border-[#f7e0d5] p-2.5 rounded-lg">
+                                {childMOs.filter(o => o.status === "READY" || o.status === "IN_PROGRESS").map(o => (
+                                  <li key={o.id} className="leading-relaxed">
+                                    Go to **Manufacturing Orders** and complete the child order <strong className="font-mono bg-[#8b3d1e]/10 px-1 py-0.2 rounded text-[#8b3d1e]">{o.mo_number}</strong>.
+                                  </li>
+                                ))}
+                                {childPOs.filter(po => po.status === "DRAFT" || po.status === "CONFIRMED" || po.status === "SHIPPED").map(po => (
+                                  <li key={po.id} className="leading-relaxed">
+                                    Go to **Purchase Orders** and receive the purchase order <strong className="font-mono bg-[#8b3d1e]/10 px-1 py-0.2 rounded text-[#8b3d1e]">{po.po_number}</strong>.
+                                  </li>
+                                ))}
+                                {childMOs.length === 0 && childPOs.length === 0 && (
+                                  <li className="leading-relaxed text-[#8b3d1e] font-semibold">
+                                    No purchase orders or child manufacturing orders are required because raw components are fully in stock. You must first produce the required sub-assemblies.
+                                  </li>
+                                )}
+                              </ul>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 )}
 
@@ -435,16 +555,38 @@ export default function ManufacturingOrdersClient({ initialOrders, products }: M
                           <tr>
                             <th className="px-4 py-3">Component Material</th>
                             <th className="px-4 py-3 text-right">Required</th>
-                            <th className="px-4 py-3 text-right">Warehouse Available</th>
+                            <th className="px-4 py-3 text-right">Available</th>
                             <th className="px-4 py-3 text-center">Status</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#f3ebdd]">
-                          {getBom(selectedOrder.product_name, selectedOrder.quantity).map((component, idx) => {
+                          {getBom(selectedOrder.product_id, selectedOrder.quantity).map((component, idx) => {
                             const isShortage = component.qtyAvailable < component.qtyRequired;
+                            const relatedMO = orders.find(o => o.parent_manufacturing_order_id === selectedOrder.id && o.product_id === component.id);
+                            const relatedPO = purchaseOrderItems.find(poi => poi.manufacturing_order_id === selectedOrder.id && poi.product_id === component.id);
+                            
                             return (
                               <tr key={idx} className="hover:bg-[#fbfaf6]/50">
-                                <td className="px-4 py-3 font-bold text-[#202a25]">{component.name}</td>
+                                <td className="px-4 py-3">
+                                  <div className="font-bold text-[#202a25]">{component.name}</div>
+                                  <div className="text-[10px] text-[#68756e] font-normal font-mono flex items-center gap-1.5 mt-0.5">
+                                    <span>{component.sku}</span>
+                                    <span className="text-[#ded4c3]">•</span>
+                                    <span className="capitalize text-[#1f806f] font-semibold">{component.procurementType.toLowerCase()}</span>
+                                    {relatedMO && (
+                                      <>
+                                        <span className="text-[#ded4c3]">•</span>
+                                        <span className="text-purple-700 font-bold font-mono">MO: {relatedMO.mo_number} ({relatedMO.status})</span>
+                                      </>
+                                    )}
+                                    {relatedPO && (
+                                      <>
+                                        <span className="text-[#ded4c3]">•</span>
+                                        <span className="text-blue-700 font-bold font-mono">PO: {relatedPO.po_number} ({relatedPO.status})</span>
+                                      </>
+                                    )}
+                                  </div>
+                                </td>
                                 <td className="px-4 py-3 text-right font-semibold text-[#53645c]">{component.qtyRequired}</td>
                                 <td className={`px-4 py-3 text-right font-bold ${isShortage ? 'text-red-600' : 'text-emerald-700'}`}>
                                   {component.qtyAvailable}

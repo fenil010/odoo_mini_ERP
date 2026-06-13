@@ -28,6 +28,7 @@ import { getRoleDashboardFromDB, getRolePageFromDB } from "@/lib/role-queries";
 import { cn } from "@/lib/utils";
 import { type RoleKey, type SidebarIcon } from "./role-data";
 import { logout } from "@/app/actions/auth";
+import { getCurrentUser } from "@/lib/auth/auth";
 import DashboardCharts from "./components/DashboardCharts";
 import DashboardHeader from "./components/DashboardHeader";
 import {
@@ -72,7 +73,12 @@ const iconMap: Record<SidebarIcon, LucideIcon> = {
 export async function RoleWorkspace({ role, section, children }: RoleWorkspaceProps) {
   await connection();
 
-  const dashboard = await getRoleDashboardFromDB(role);
+  // If the logged-in user is ADMIN, always show the admin sidebar
+  // regardless of which role-specific page they navigated to.
+  const sessionUser = await getCurrentUser();
+  const sidebarRole: RoleKey = sessionUser?.roleKey === "admin" ? "admin" : role;
+
+  const dashboard = await getRoleDashboardFromDB(sidebarRole);
 
   if (!dashboard || !dashboard.sidebarSections || dashboard.sidebarSections.length === 0) {
     return (
@@ -81,7 +87,7 @@ export async function RoleWorkspace({ role, section, children }: RoleWorkspacePr
           <Activity className="size-12 mx-auto text-[#176b5d] mb-4" />
           <h1 className="text-2xl font-semibold text-[#18231f]">Workspace Data Unavailable</h1>
           <p className="mt-3 text-sm text-[#53645c]">
-            The layout configuration for role "{role}" could not be loaded or is incomplete.
+            The layout configuration for role "{sidebarRole}" could not be loaded or is incomplete.
           </p>
           <div className="mt-6">
             <form action={logout}>
@@ -99,9 +105,11 @@ export async function RoleWorkspace({ role, section, children }: RoleWorkspacePr
     );
   }
 
-  const currentPage = (await getRolePageFromDB(role, section)) ?? (await getRolePageFromDB(role));
-  const businessData = await getRoleBusinessData(role, section);
-  const navbarData = await getNavbarData(role);
+  const currentPage = (await getRolePageFromDB(sidebarRole, section)) 
+    ?? (await getRolePageFromDB(role, section))  // fallback: look up in the actual role's menu (for admin visiting other pages)
+    ?? (await getRolePageFromDB(sidebarRole));
+  const businessData = children ? null : await getRoleBusinessData(role, section);
+  const navbarData = await getNavbarData(sidebarRole);
   
   const firstSection = dashboard.sidebarSections[0];
   const firstItem = firstSection?.items?.[0];
@@ -219,7 +227,7 @@ export async function RoleWorkspace({ role, section, children }: RoleWorkspacePr
               <DashboardCharts role={role} data={analyticsData} />
             ) : (
               <div className="mt-6">
-                <DynamicSectionClient role={role} section={section!} businessData={businessData} />
+                <DynamicSectionClient role={role} section={section!} businessData={businessData!} />
               </div>
             )}
           </div>

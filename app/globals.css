@@ -45,3 +45,41 @@ body {
 @utility animate-slide-in {
   animation: slide-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+
+@keyframes landing-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float-card {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@utility animate-landing-rise {
+  animation: landing-rise 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@utility animate-float-card {
+  animation: landing-rise 0.8s cubic-bezier(0.16, 1, 0.3, 1) both,
+    float-card 5.5s ease-in-out 0.8s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-landing-rise,
+  .animate-float-card {
+    animation: none;
+  }
+}

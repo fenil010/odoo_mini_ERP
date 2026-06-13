@@ -66,6 +66,11 @@ export async function requireAuth(): Promise<SessionPayload> {
 export async function requireRole(allowedRoleKey: RoleKey): Promise<SessionPayload> {
   const user = await requireAuth();
 
+  // ADMIN has superuser access — bypass all role-specific guards
+  if (user.roleKey === "admin") {
+    return user;
+  }
+
   if (user.roleKey !== allowedRoleKey) {
     // Redirect the user to their own dashboard instead of showing 403
     redirect(ROLE_DASHBOARD[user.roleKey]);

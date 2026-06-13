@@ -31,9 +31,13 @@ import Modal from "@/app/components/ui/Modal";
 import EmptyState from "@/app/components/ui/EmptyState";
 
 type RelatedMO = {
+  id: number;
   mo_number: string;
   quantity: number;
   status: string;
+  product_name: string;
+  parent_manufacturing_order_id: number | null;
+  child_pos: { po_number: string; status: string; product_name: string }[];
 };
 
 type RelatedPO = {
@@ -669,33 +673,100 @@ export default function SalesOrdersClient({ initialOrders, customers, products }
 
                 {activeTab === "LINKS" && (
                   <div className="space-y-6">
-                    <h4 className="text-xs font-bold text-[#18231f] uppercase tracking-wider">Traceability Documents</h4>
+                    <h4 className="text-xs font-bold text-[#18231f] uppercase tracking-wider">Procurement Traceability Tree</h4>
                     {selectedOrder.related_mos.length === 0 && selectedOrder.related_pos.length === 0 ? (
                       <div className="text-center py-6 border border-dashed border-[#ded4c3] rounded-xl text-xs text-[#53645c]">
                         No linked Manufacturing or Purchase orders found. Order was satisfied using ready stock.
                       </div>
                     ) : (
-                      <div className="space-y-4">
-                        {selectedOrder.related_mos.length > 0 && (
-                          <div className="space-y-2">
-                            <span className="text-[10px] font-bold text-[#68756e] uppercase">Manufacturing Jobs</span>
-                            {selectedOrder.related_mos.map((mo, i) => (
-                              <Link key={i} href={`/dashboard/manufacturing/manufacturing-orders?search=${mo.mo_number}`} className="group flex items-center justify-between border border-[#ded4c3] hover:border-[#1f806f] rounded-xl p-3 bg-[#fbfaf6] hover:bg-white transition-all">
-                                <div>
-                                  <p className="font-mono text-xs font-bold text-[#1f806f] group-hover:underline flex items-center gap-1">
-                                    {mo.mo_number}
-                                    <ExternalLink className="size-3" />
-                                  </p>
-                                  <p className="text-[10px] text-[#53645c] mt-0.5">Produce Quantity: {mo.quantity}</p>
+                      <div className="space-y-3">
+                        {/* Root-level MOs (no parent) */}
+                        {(() => {
+                          const moMap = new Map<number, RelatedMO>();
+                          (selectedOrder.related_mos || []).forEach((mo) => moMap.set(mo.id, mo));
+
+                          const rootMOs = (selectedOrder.related_mos || []).filter(
+                            (mo) => !mo.parent_manufacturing_order_id
+                          );
+                          const childMOs = (selectedOrder.related_mos || []).filter(
+                            (mo) => !!mo.parent_manufacturing_order_id
+                          );
+
+                          // Group children by parent_id
+                          const childrenByParent = new Map<number, RelatedMO[]>();
+                          childMOs.forEach((mo) => {
+                            const pid = mo.parent_manufacturing_order_id!;
+                            if (!childrenByParent.has(pid)) childrenByParent.set(pid, []);
+                            childrenByParent.get(pid)!.push(mo);
+                          });
+
+                          const renderMO = (mo: RelatedMO, depth: number) => (
+                            <div key={mo.id} style={{ marginLeft: depth * 20 }} className="space-y-1.5">
+                              {/* MO row */}
+                              <Link
+                                href={`/dashboard/manufacturing/manufacturing-orders?search=${mo.mo_number}`}
+                                className="group flex items-center justify-between border border-[#ded4c3] hover:border-[#1f806f] rounded-xl p-3 bg-[#fbfaf6] hover:bg-white transition-all"
+                              >
+                                <div className="flex items-start gap-2">
+                                  {depth > 0 && (
+                                    <span className="mt-0.5 text-[#ded4c3] select-none">└</span>
+                                  )}
+                                  <div>
+                                    <p className="font-mono text-xs font-bold text-[#1f806f] group-hover:underline flex items-center gap-1">
+                                      {mo.mo_number}
+                                      <ExternalLink className="size-3" />
+                                    </p>
+                                    <p className="text-[10px] text-[#53645c] mt-0.5">
+                                      Produce <span className="font-semibold">{mo.quantity}x</span> {mo.product_name}
+                                    </p>
+                                  </div>
                                 </div>
                                 <StatusBadge status={mo.status} />
                               </Link>
-                            ))}
-                          </div>
-                        )}
+
+                              {/* Child POs under this MO */}
+                              {(mo.child_pos || []).map((po, pi) => (
+                                <div key={pi} style={{ marginLeft: 20 }}>
+                                  <Link
+                                    href={`/dashboard/purchase/purchase-orders?search=${po.po_number}`}
+                                    className="group flex items-center justify-between border border-amber-200 hover:border-amber-400 rounded-xl p-2.5 bg-amber-50/60 hover:bg-white transition-all"
+                                  >
+                                    <div className="flex items-start gap-2">
+                                      <span className="mt-0.5 text-amber-300 select-none">└</span>
+                                      <div>
+                                        <p className="font-mono text-xs font-bold text-amber-700 group-hover:underline flex items-center gap-1">
+                                          {po.po_number}
+                                          <ExternalLink className="size-3" />
+                                        </p>
+                                        <p className="text-[10px] text-[#53645c] mt-0.5">Buy {po.product_name}</p>
+                                      </div>
+                                    </div>
+                                    <StatusBadge status={po.status} />
+                                  </Link>
+                                </div>
+                              ))}
+
+                              {/* Render child MOs recursively */}
+                              {(childrenByParent.get(mo.id) || []).map((child) =>
+                                renderMO(child, depth + 1)
+                              )}
+                            </div>
+                          );
+
+                          return (
+                            <div className="space-y-2">
+                              {rootMOs.length > 0 && (
+                                <span className="text-[10px] font-bold text-[#68756e] uppercase">Manufacturing Jobs</span>
+                              )}
+                              {rootMOs.map((mo) => renderMO(mo, 0))}
+                            </div>
+                          );
+                        })()}
+
+                        {/* Direct POs (no MO parent) */}
                         {selectedOrder.related_pos.length > 0 && (
                           <div className="space-y-2">
-                            <span className="text-[10px] font-bold text-[#68756e] uppercase">Supplier Procurement</span>
+                            <span className="text-[10px] font-bold text-[#68756e] uppercase">Direct Supplier Procurement</span>
                             {selectedOrder.related_pos.map((po, i) => (
                               <Link key={i} href={`/dashboard/purchase/purchase-orders?search=${po.po_number}`} className="group flex items-center justify-between border border-[#ded4c3] hover:border-[#1f806f] rounded-xl p-3 bg-[#fbfaf6] hover:bg-white transition-all">
                                 <div>
