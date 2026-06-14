@@ -109,7 +109,7 @@ export default async function SalesOrdersPage() {
   const products = await sql<any[]>`
     SELECT id, name, sku, sale_price 
     FROM products 
-    WHERE id NOT IN (SELECT DISTINCT component_product_id FROM bom_items)
+    WHERE product_type = 'FINISHED_GOOD'
     ORDER BY name ASC
   `;
 

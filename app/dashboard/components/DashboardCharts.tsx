@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { ProductImage } from "../product-image";
 import {
   ResponsiveContainer,
   BarChart,
@@ -410,6 +411,46 @@ export default function DashboardCharts({ role, data }: DashboardChartsProps) {
                   </ResponsiveContainer>
                 )}
               </div>
+            </div>
+
+            {/* Product Catalog Section */}
+            <div className="md:col-span-2 rounded-2xl border border-[#ded4c3] bg-white p-6 shadow-xs hover:shadow-md transition-all duration-300">
+              <div>
+                <p className={labelStyle}>Product Catalog</p>
+                <h2 className={titleStyle}><Package className="size-4 text-[#1f806f]" /> Active Selling Products</h2>
+              </div>
+              
+              {(!data.sellingProducts || data.sellingProducts.length === 0) ? (
+                <div className="flex h-32 items-center justify-center text-sm text-[#53645c]">No selling products available</div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 mt-4">
+                  {data.sellingProducts.map((product: any) => (
+                    <div key={product.id} className="group flex flex-col overflow-hidden rounded-xl border border-[#ded4c3] bg-[#fbfaf6] hover:bg-white hover:border-[#1f806f]/40 hover:shadow-sm transition-all duration-300">
+                      <div className="relative aspect-video w-full border-b border-[#f3ebdd] bg-[#f7f4ed] overflow-hidden">
+                        <ProductImage src={product.image_url} alt={product.name} />
+                        <div className="absolute top-2 left-2">
+                          <span className="rounded bg-black/60 backdrop-blur-xs px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-white">
+                            {product.sku}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="p-3.5 flex-1 flex flex-col justify-between">
+                        <div>
+                          <h4 className="font-bold text-[#18231f] group-hover:text-[#1f806f] transition-colors leading-snug line-clamp-1 text-sm">
+                            {product.name}
+                          </h4>
+                        </div>
+                        <div className="mt-2 pt-2 border-t border-[#f3ebdd] flex justify-between items-center">
+                          <span className="text-[10px] text-[#68756e] font-semibold">Selling Price</span>
+                          <span className="font-bold text-sm text-[#1f806f]">
+                            ₹{Number(product.sale_price).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

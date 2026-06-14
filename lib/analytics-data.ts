@@ -11,6 +11,7 @@ export type SalesAnalytics = {
   ordersThisMonth: { date: string; count: number }[];
   deliveredVsPending: { name: string; value: number }[];
   revenueTrend: { month: string; revenue: number }[];
+  sellingProducts: { id: number; name: string; sku: string; sale_price: number; image_url: string | null }[];
 };
 
 export type PurchaseAnalytics = {
@@ -77,7 +78,7 @@ export async function getAdminAnalytics(): Promise<AdminAnalytics> {
 }
 
 export async function getSalesAnalytics(): Promise<SalesAnalytics> {
-  const [ordersThisMonth, deliveredVsPending, revenueTrend] = await Promise.all([
+  const [ordersThisMonth, deliveredVsPending, revenueTrend, sellingProducts] = await Promise.all([
     sql`
       SELECT TO_CHAR(created_at, 'YYYY-MM-DD') as date, COUNT(*)::int as count
       FROM sales_orders
@@ -104,13 +105,26 @@ export async function getSalesAnalytics(): Promise<SalesAnalytics> {
       WHERE so.status = 'DELIVERED'
       GROUP BY month
       ORDER BY month ASC
+    `,
+    sql`
+      SELECT id, name, sku, sale_price, image_url
+      FROM products
+      WHERE product_type = 'FINISHED_GOOD'
+      ORDER BY name ASC
     `
   ]);
 
   return {
     ordersThisMonth: ordersThisMonth.map(r => ({ date: r.date, count: r.count })),
     deliveredVsPending: deliveredVsPending.map(r => ({ name: r.name, value: r.value })),
-    revenueTrend: revenueTrend.map(r => ({ month: r.month, revenue: r.revenue }))
+    revenueTrend: revenueTrend.map(r => ({ month: r.month, revenue: r.revenue })),
+    sellingProducts: sellingProducts.map(r => ({
+      id: r.id,
+      name: r.name,
+      sku: r.sku,
+      sale_price: r.sale_price,
+      image_url: r.image_url
+    }))
   };
 }
 
