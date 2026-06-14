@@ -52,10 +52,10 @@ CREATE TABLE products (
     product_type VARCHAR(30),
     
     -- Additional charges for cost calculation and net profit analysis
-    shipping_charge DECIMAL(12,2) DEFAULT 0.00,
-    packing_charge DECIMAL(12,2) DEFAULT 0.00,
-    manufacturing_charge DECIMAL(12,2) DEFAULT 0.00,
-    other_charge DECIMAL(12,2) DEFAULT 0.00,
+    shipping_charge DECIMAL(12,2) DEFAULT 0.00 CHECK (shipping_charge >= 0.00),
+    packing_charge DECIMAL(12,2) DEFAULT 0.00 CHECK (packing_charge >= 0.00),
+    manufacturing_charge DECIMAL(12,2) DEFAULT 0.00 CHECK (manufacturing_charge >= 0.00),
+    other_charge DECIMAL(12,2) DEFAULT 0.00 CHECK (other_charge >= 0.00),
     
     -- Timestamp of record creation for audit trail
     created_at TIMESTAMP DEFAULT NOW()
